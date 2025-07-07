@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle } from "lucide-react"
-import { AuroraBackground } from "@/components/ui/aurora-background"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X } from "lucide-react"
 
 // Spindl API interfaces
 interface SpindlPrice {
@@ -278,8 +278,57 @@ export default function YolkBusinessPortal() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [orderDate, setOrderDate] = useState("")
   const [guestCount, setGuestCount] = useState("")
+  const [selectedVenue, setSelectedVenue] = useState("")
+  const [selectedTime, setSelectedTime] = useState("")
+  const [selectedDate, setSelectedDate] = useState("")
+  const [selectedHour, setSelectedHour] = useState("")
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const minDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    return minDate.getMonth()
+  })
+  const [calendarYear, setCalendarYear] = useState(() => {
+    const minDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000)
+    return minDate.getFullYear()
+  })
   const [menuItems, setMenuItems] = useState<MenuItem[]>([])
   const [isLoadingMenu, setIsLoadingMenu] = useState(false)
+  const [previousView, setPreviousView] = useState("")
+  const [showYolkYes, setShowYolkYes] = useState(false)
+  const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null)
+  const [productModalOpen, setProductModalOpen] = useState(false)
+  const [modalQuantity, setModalQuantity] = useState(1)
+  const [showOrderComplete, setShowOrderComplete] = useState(false)
+
+  // Available venues
+  const venues = [
+    { id: "new-oxford-st", name: "New Oxford St", address: "102 New Oxford St, WC1A 1HB" },
+    { id: "broadgate", name: "Broadgate", address: "Unit 2, 1 Finsbury Avenue, EC2M 2PP" },
+    { id: "soho", name: "Soho", address: "19 Golden Square, London, W1F 9JJ" },
+    { id: "new-st-square", name: "New St. Square", address: "3a New St. Sq, London, EC4A 3BF" },
+    { id: "canary-wharf", name: "Canary Wharf", address: "15 Cabot Square, Unit RS-140, E14 4QT" },
+    { id: "london-bridge", name: "London Bridge", address: "Unit D, 7 More London Riverside, SE1 2RT" },
+    { id: "strand", name: "Strand", address: "82-83 Strand, WC2R 0DU" },
+    { id: "london-wall", name: "London Wall", address: "150-151 Salisbury House, EC2M 5QD" },
+    { id: "victoria", name: "Victoria", address: "Unit 14 Cardinal Place, SW1E 5JH" },
+    { id: "high-holborn", name: "High Holborn", address: "90 High Holborn, WC1V 6LJ" },
+  ]
+
+  // Combine date and time into selectedTime when both are available
+  useEffect(() => {
+    if (selectedDate && selectedHour) {
+      setSelectedTime(`${selectedDate}T${selectedHour}`)
+    } else {
+      setSelectedTime("")
+    }
+  }, [selectedDate, selectedHour])
+
+  // Track previous view and scroll to top when transitioning from setup to menu
+  useEffect(() => {
+    if (previousView === "setup" && currentView === "menu") {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+    setPreviousView(currentView)
+  }, [currentView, previousView])
 
   // Load menu data on component mount
   useEffect(() => {
@@ -308,6 +357,10 @@ export default function YolkBusinessPortal() {
       }
       return [...prev, { ...item, quantity: 1 }]
     })
+    
+    // Show YOLK YES! animation
+    setShowYolkYes(true)
+    setTimeout(() => setShowYolkYes(false), 2000)
   }
 
   const updateQuantity = (id: string, change: number) => {
@@ -332,11 +385,196 @@ export default function YolkBusinessPortal() {
     return cart.reduce((total, item) => total + item.quantity, 0)
   }
 
+  const openProductModal = (product: MenuItem) => {
+    setSelectedProduct(product)
+    setModalQuantity(1)
+    setProductModalOpen(true)
+  }
+
+  const closeProductModal = () => {
+    setProductModalOpen(false)
+    setSelectedProduct(null)
+    setModalQuantity(1)
+  }
+
+  const addToCartFromModal = () => {
+    if (selectedProduct) {
+      for (let i = 0; i < modalQuantity; i++) {
+        addToCart(selectedProduct)
+      }
+      closeProductModal()
+    }
+  }
+
+  const completeOrder = () => {
+    setShowOrderComplete(true)
+    setTimeout(() => {
+      setShowOrderComplete(false)
+      setCurrentView("hero")
+      setCart([])
+    }, 4000)
+  }
+
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
+      {/* YOLK YES! Animation - centered on screen */}
+      <AnimatePresence>
+        {showYolkYes && (
+          <motion.div
+            initial={{ scale: 0, rotate: -180, opacity: 0, y: 20 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1, y: 0 }}
+            exit={{ scale: 0, rotate: 180, opacity: 0, y: -20 }}
+            transition={{ duration: 0.5, type: "spring", bounce: 0.4 }}
+            className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none"
+          >
+            <img 
+              src="/yolk-yes.png" 
+              alt="YOLK YES!" 
+              className="w-[220px] h-[220px] drop-shadow-2xl"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Order Complete Animation */}
+      <AnimatePresence>
+        {showOrderComplete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200] backdrop-blur-sm"
+          >
+            <div className="text-center space-y-8">
+              <motion.div
+                initial={{ y: 50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3, duration: 0.8 }}
+                className="space-y-4"
+              >
+                <motion.h1 
+                  className="text-[120px] text-[#f8f68f] leading-relaxed"
+                  style={{ 
+                    fontFamily: 'Hipnouma, serif',
+                    letterSpacing: '0.01em'
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: "easeInOut"
+                  }}
+                >
+                  We've got your order!
+                </motion.h1>
+              </motion.div>
+              
+              <motion.div
+                initial={{ y: 30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 1.5, duration: 0.6 }}
+                className="space-y-2"
+              >
+                <p 
+                  className="text-white text-xl uppercase tracking-wider"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.1em' }}
+                >
+                  Order confirmed for {venues.find(v => v.id === selectedVenue)?.name}
+                </p>
+                <p className="text-gray-400">
+                  {new Date(selectedTime).toLocaleDateString('en-GB', { 
+                    weekday: 'long', 
+                    day: 'numeric', 
+                    month: 'long',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  })}
+                </p>
+              </motion.div>
+              
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Navbar */}
+      <nav className="fixed top-0 w-full z-50" style={{ backgroundColor: '#F8F68F' }}>
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-8">
+              {/* YOLK Brand */}
+              <div className="flex items-center">
+                <img 
+                  src="/yolk-icon.svg" 
+                  alt="YOLK" 
+                  className="h-14 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setCurrentView("hero")}
+                />
+              </div>
+              
+              {/* Navigation Items */}
+              <div className="flex items-center space-x-6 text-xl">
+                <button 
+                  onClick={() => setCurrentView("setup")}
+                  className="text-black hover:text-gray-700 font-medium" 
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  ORDER
+                </button>
+                <a href="#" className="text-black hover:text-gray-700 font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  LOCATIONS
+                </a>
+                <button 
+                  onClick={() => setCurrentView("menu")}
+                  className="text-black hover:text-gray-700 font-medium" 
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  MENUS
+                </button>
+                <a href="#" className="text-black hover:text-gray-700 font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  BREWCLUB
+                </a>
+              </div>
+            </div>
+            
+            {/* Order Info Display */}
+            {selectedVenue && selectedTime && (
+              <button 
+                onClick={() => setCurrentView("setup")}
+                className="flex items-center space-x-4 bg-black/10 px-4 py-2 rounded-lg hover:bg-black/20 transition-colors cursor-pointer"
+                title="Click to change venue or time"
+              >
+                <div className="flex items-center space-x-2">
+                  <Building2 className="h-4 w-4 text-black" />
+                  <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    {venues.find(v => v.id === selectedVenue)?.name}
+                  </span>
+                </div>
+                <div className="w-px h-4 bg-black/30"></div>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4 text-black" />
+                  <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    {new Date(selectedTime).toLocaleDateString('en-GB', { 
+                      weekday: 'short', 
+                      day: 'numeric', 
+                      month: 'short'
+                    })} {new Date(selectedTime).toLocaleTimeString('en-GB', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true
+                    })}
+                  </span>
+                </div>
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
+      
       <AnimatePresence mode="wait">
         {currentView === "hero" && (
-          <AuroraBackground className="bg-black">
+          <div className="min-h-screen bg-black flex items-center justify-center pt-[10rem]">
             <motion.div
               key="hero"
               initial={{ opacity: 0 }}
@@ -351,14 +589,15 @@ export default function YolkBusinessPortal() {
                 transition={{ delay: 0.2, duration: 0.8 }}
               >
                 <div className="relative inline-block">
-                  <h1 className="text-7xl md:text-9xl font-thin tracking-tight mb-6">
-                    <span className="bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">YOLK</span>
-                  </h1>
-                  <Badge className="absolute -top-2 -right-12 bg-black text-white px-3 py-1 text-xs font-medium">
+                  <img 
+                    src="/yolk-logo.svg" 
+                    alt="YOLK" 
+                    className="h-[250px] w-auto mb-6"
+                  />
+                  <Badge className="absolute -top-8 -right-14 bg-zinc-900 text-white px-3 py-1 text-xs font-medium">
                     BUSINESS
                   </Badge>
                 </div>
-                <p className="text-xl md:text-xl text-gray-100 mb-8 font-light">Good bites only. For any business.</p>
                 <p className="text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed text-sm">
                   Exclusive access for verified business partners. Place large group orders with flexible invoicing and
                   premium service guaranteed.
@@ -373,17 +612,19 @@ export default function YolkBusinessPortal() {
               >
                 <Button
                   onClick={() => setCurrentView("apply")}
-                  className="bg-white text-black hover:bg-gray-300 px-5 py-6 text-sm font-medium rounded-full transition-all duration-300"
+                  className="bg-[#3250B9] text-[#f8f68f] 
+                  px-5 py-6 text-xl font-medium rounded-full transition-all duration-300 uppercase shadow-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
                   Become partner
-                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
                 <Button
-                  onClick={() => setCurrentView("menu")}
+                  onClick={() => setCurrentView("setup")}
                   variant="outline"
-                  className="text-white hover:bg-[#212121] hover:text-white px-5 py-6 text-sm font-medium rounded-full transition-all duration-300 "
+                  className="bg-[#FF6400] text-[#f8f68f] hover:from-[#e6e346] hover:to-[#d4d123] hover:text-white px-5 py-6 text-xl font-medium rounded-full transition-all duration-300 uppercase shadow-lg border-0"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
-                  Browse menu
+                  ORDER NOW
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </motion.div>
 
@@ -394,27 +635,249 @@ export default function YolkBusinessPortal() {
                 className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto"
               >
                 <div className="text-center">
-                  <Calendar className="h-8 w-8 mx-auto mb-4 text-gray-100" />
-                  <h3 className="text-md font-medium mb-2 text-gray-100">3+ days notice</h3>
-                  <p className="text-gray-400 text-sm">Advanced ordering for perfect preparation</p>
+                  <Calendar className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
+                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>PLAN AHEAD, TASTE AMAZING</h3>
+                  <p className="text-gray-400 text-sm">3+ days notice for next-level prep</p>
                 </div>
                 <div className="text-center">
-                  <Building2 className="h-8 w-8 mx-auto mb-4 text-gray-100" />
-                  <h3 className="text-md font-medium mb-2 text-gray-100">Business partners</h3>
-                  <p className="text-gray-400 text-sm">Exclusive access for verified companies</p>
+                  <Building2 className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
+                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>EXCLUSIVE ACCESS</h3>
+                  <p className="text-gray-400 text-sm">VIP treatment for verified partners</p>
                 </div>
                 <div className="text-center">
-                  <CheckCircle className="h-8 w-8 mx-auto mb-4 text-gray-100" />
-                  <h3 className="text-md font-medium mb-2 text-gray-100">Flexible billing</h3>
-                  <p className="text-gray-400 text-sm">No prepayment, invoice after service</p>
+                  <CheckCircle className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
+                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>PAY LATER, PARTY NOW</h3>
+                  <p className="text-gray-400 text-sm">No prepayment needed - we trust you</p>
                 </div>
               </motion.div>
             </motion.div>
-          </AuroraBackground>
+          </div>
+        )}
+
+        {currentView === "setup" && (
+          <div className="min-h-screen bg-black flex items-center justify-center pt-20">
+            <motion.div
+              key="setup"
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50 }}
+              transition={{ duration: 0.6 }}
+              className="relative z-10 flex items-center justify-center p-6 pt-20 pb-20"
+            >
+              <Card className="w-[700px] bg-zinc-900/50 border-zinc-800 backdrop-blur-sm pt-8">
+                <CardHeader className="text-center pb-8">
+                  <CardTitle className="text-3xl font-light text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    Setup Your Order
+                  </CardTitle>
+                  <CardDescription className="text-gray-400 text-lg">
+                    Choose your pickup location and time
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  {/* Venue Selection */}
+                  <div className="space-y-4">
+                    <Label className="text-white text-xl font-medium uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      <Building2 className="inline h-5 w-5 mr-2" />
+                      Pickup Location
+                    </Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {venues.map((venue) => (
+                        <Card 
+                          key={venue.id}
+                          className={`cursor-pointer transition-all duration-200 ${
+                            selectedVenue === venue.id 
+                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                          }`}
+                          onClick={() => setSelectedVenue(venue.id)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                                  {venue.name}
+                                </h3>
+                                <p className="text-gray-400 text-xs leading-tight">{venue.address}</p>
+                              </div>
+                              {selectedVenue === venue.id && (
+                                <CheckCircle className="h-5 w-5 text-[#f8f68f] ml-2 flex-shrink-0" />
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Date & Time Selection */}
+                  <div className="space-y-6 pt-10">
+                    <Label className="text-white text-2xl font-medium uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      <Calendar className="inline h-5 w-5 mr-2" />
+                      Pickup Date & Time
+                    </Label>
+                    
+                    {/* Date Selection */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Select Date
+                        </p>
+                        <div className="flex items-center space-x-4 text-xl">
+                          <button
+                            onClick={() => {
+                              if (calendarMonth === 0) {
+                                setCalendarMonth(11)
+                                setCalendarYear(calendarYear - 1)
+                              } else {
+                                setCalendarMonth(calendarMonth - 1)
+                              }
+                            }}
+                            disabled={(() => {
+                              const today = new Date()
+                              const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
+                              const prevMonth = calendarMonth === 0 ? 11 : calendarMonth - 1
+                              const prevYear = calendarMonth === 0 ? calendarYear - 1 : calendarYear
+                              return new Date(prevYear, prevMonth + 1, 0) < minDate
+                            })()}
+                            className="text-[#f8f68f] hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
+                          >
+                            ←
+                          </button>
+                          <p className="text-white font-medium min-w-[140px] text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            {new Date(calendarYear, calendarMonth).toLocaleDateString('en-GB', { 
+                              month: 'long', 
+                              year: 'numeric' 
+                            })}
+                          </p>
+                          <button
+                            onClick={() => {
+                              if (calendarMonth === 11) {
+                                setCalendarMonth(0)
+                                setCalendarYear(calendarYear + 1)
+                              } else {
+                                setCalendarMonth(calendarMonth + 1)
+                              }
+                            }}
+                            className="text-[#f8f68f] hover:text-white transition-colors"
+                          >
+                            →
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-7 gap-2">
+                        {/* Calendar header */}
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                          <div key={day} className="text-center text-zinc-400 text-sm p-2 font-medium">
+                            {day}
+                          </div>
+                        ))}
+                        {/* Calendar days */}
+                        {Array.from({ length: 42 }, (_, i) => {
+                          const today = new Date()
+                          const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
+                          const startOfMonth = new Date(calendarYear, calendarMonth, 1)
+                          const firstDayOfWeek = startOfMonth.getDay()
+                          const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
+                          
+                          const dayNumber = i - firstDayOfWeek + 1
+                          const isValidDay = dayNumber > 0 && dayNumber <= daysInMonth
+                          const currentDate = new Date(calendarYear, calendarMonth, dayNumber)
+                          const isAvailable = isValidDay && currentDate >= minDate
+                          const dateString = currentDate.toISOString().split('T')[0]
+                          const isSelected = selectedDate === dateString
+                          
+                          if (!isValidDay) {
+                            return <div key={i} className="p-2"></div>
+                          }
+                          
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => isAvailable ? setSelectedDate(dateString) : null}
+                              className={`p-2 text-sm rounded transition-all ${
+                                isAvailable
+                                  ? isSelected
+                                    ? 'bg-[#f8f68f] text-black font-bold'
+                                    : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
+                                  : 'bg-transparent text-zinc-600 cursor-not-allowed'
+                              }`}
+                              disabled={!isAvailable}
+                            >
+                              {dayNumber}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Time Selection */}
+                    <div className="space-y-3">
+                      <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Select Time
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { display: '9:00 AM', value: '09:00' },
+                          { display: '10:00 AM', value: '10:00' },
+                          { display: '11:00 AM', value: '11:00' },
+                          { display: '12:00 PM', value: '12:00' },
+                          { display: '1:00 PM', value: '13:00' },
+                          { display: '2:00 PM', value: '14:00' },
+                          { display: '3:00 PM', value: '15:00' },
+                          { display: '4:00 PM', value: '16:00' },
+                          { display: '5:00 PM', value: '17:00' },
+                          { display: '6:00 PM', value: '18:00' },
+                          { display: '7:00 PM', value: '19:00' },
+                          { display: '8:00 PM', value: '20:00' }
+                        ].map(time => (
+                          <button
+                            key={time.value}
+                            onClick={() => setSelectedHour(time.value)}
+                            className={`p-3 text-sm rounded transition-all ${
+                              selectedHour === time.value
+                                ? 'bg-[#f8f68f] text-black font-bold'
+                                : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
+                            }`}
+                          >
+                            {time.display}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-400">
+                      Orders must be placed at least 3 days in advance
+                    </p>
+                  </div>
+
+                  <div className="flex gap-6 pt-6 pb-2">
+                    <Button
+                      onClick={() => setCurrentView("hero")}
+                      variant="outline"
+                      className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 h-12 uppercase text-xl"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                    >
+                      Back
+                    </Button>
+                    <Button 
+                      onClick={() => setCurrentView("menu")}
+                      className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] h-12 uppercase font-medium text-xl"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                      disabled={!selectedVenue || !selectedDate || !selectedHour}
+                    >
+                      Continue to Menu
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
         )}
 
         {currentView === "apply" && (
-          <AuroraBackground className="bg-black">
+          <div className="min-h-screen bg-black flex items-center justify-center pt-20">
             <motion.div
               key="apply"
               initial={{ opacity: 0, x: 100 }}
@@ -425,7 +888,7 @@ export default function YolkBusinessPortal() {
             >
             <Card className="w-[600px] bg-gray-900/50 border-gray-800 backdrop-blur-sm pt-8">
               <CardHeader className="text-center pb-8">
-                <CardTitle className="text-2xl font-light text-white">Partnership application</CardTitle>
+                <CardTitle className="text-2xl font-light text-white" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Partnership application</CardTitle>
                 <CardDescription className="text-gray-400 text-md">
                   Join our exclusive network of business partners
                 </CardDescription>
@@ -526,7 +989,7 @@ export default function YolkBusinessPortal() {
               </CardContent>
             </Card>
             </motion.div>
-          </AuroraBackground>
+          </div>
         )}
 
         {currentView === "menu" && (
@@ -536,19 +999,20 @@ export default function YolkBusinessPortal() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -50 }}
             transition={{ duration: 0.6 }}
-            className="min-h-screen p-6"
+            className="min-h-screen p-6 pt-24"
           >
             <div className="max-w-7xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
+              <div className="flex items-center justify-between mb-8 pt-10">
                 <div>
-                  <h1 className="text-4xl font-light text-white mb-2">Menu</h1>
-                  <p className="text-gray-400">Curated selections for businesses</p>
+                  <h1 className="text-4xl font-light text-white mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Menu</h1>
+                  <p className="text-gray-300">Curated selections for large groups.</p>
                 </div>
                 <div className="flex items-center gap-4">
                   {getTotalItems() > 0 && (
                     <Button
                       onClick={() => setCurrentView("cart")}
-                      className="bg-white text-black hover:bg-gray-100 relative"
+                      className="bg-[#f8f68f] text-black hover:from-gray-100 hover:to-gray-300 relative shadow-lg font-medium uppercase text-lg"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                     >
                       <ShoppingCart className="h-4 w-4 mr-2" />
                       Cart ({getTotalItems()})
@@ -558,7 +1022,8 @@ export default function YolkBusinessPortal() {
                   <Button
                     onClick={() => setCurrentView("hero")}
                     variant="outline"
-                    className="border-gray-700 text-white hover:bg-gray-800"
+                    className="border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                    style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                   >
                     Back
                   </Button>
@@ -566,15 +1031,26 @@ export default function YolkBusinessPortal() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {menuItems.map((item, index) => (
+                {isLoadingMenu ? (
+                  <div className="col-span-full flex flex-col items-center justify-center py-16 space-y-4">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#f8f68f]"></div>
+                    <p className="text-[#f8f68f] text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      ASSEMBLING YOUR FLAVOR ARMY...
+                    </p>
+                    <p className="text-gray-400 text-sm">Preparing something epic</p>
+                  </div>
+                ) : menuItems.map((item, index) => (
                   <motion.div
                     key={item.id}
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.6 }}
                   >
-                    <Card className="bg-gray-900/50 border-gray-800 hover:border-gray-700 transition-all duration-300 overflow-hidden group">
-                      <div className="relative overflow-hidden">
+                    <Card className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-all duration-300 overflow-hidden group cursor-pointer">
+                      <div 
+                        className="relative overflow-hidden"
+                        onClick={() => openProductModal(item)}
+                      >
                         <img
                           src={item.image || "/placeholder.svg"}
                           alt={item.name}
@@ -583,17 +1059,23 @@ export default function YolkBusinessPortal() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <Badge className="absolute top-3 left-3 bg-white text-black">{item.category}</Badge>
                       </div>
-                      <CardContent className="p-6">
-                        <h3 className="text-lg font-medium text-white mb-2">{item.name}</h3>
-                        <p className="text-gray-400 text-sm mb-4 line-clamp-2">{item.description}</p>
+                      <CardContent 
+                        className="p-6 cursor-pointer"
+                        onClick={() => openProductModal(item)}
+                      >
+                        <h3 className="text-2xl uppercase font-medium text-white mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>{item.name}</h3>
+                        <p className="text-zinc-400 text-sm mb-4 line-clamp-2">{item.description}</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-light text-white">${item.price}</span>
+                          <span className="text-lg font-light text-white">£{item.price}</span>
                           <Button
-                            onClick={() => addToCart(item)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openProductModal(item)
+                            }}
                             size="sm"
-                            className="bg-white text-black hover:bg-gray-100"
+                            className="bg-[#f8f68f] text-black hover:bg-gray-100 rounded-full transition-transform hover:scale-110"
                           >
-                            <Plus className="h-4 w-4" />
+                            <Plus className="h-6 w-6" />
                           </Button>
                         </div>
                       </CardContent>
@@ -615,12 +1097,13 @@ export default function YolkBusinessPortal() {
             className="min-h-screen p-6 pt-24"
           >
             <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-8">
-                <h1 className="text-2xl font-light text-white">Order summary</h1>
+              <div className="flex items-center justify-between mb-8 pt-14">
+                <h1 className="text-4xl font-light text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Order summary</h1>
                 <Button
                   onClick={() => setCurrentView("menu")}
                   variant="outline"
-                  className="border-gray-700 text-white hover:bg-gray-800"
+                  className="border-zinc-700 text-white hover:bg-zinc-800 uppercase text-xl"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
                   Back to Menu
                 </Button>
@@ -629,25 +1112,30 @@ export default function YolkBusinessPortal() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-4">
                   {cart.length === 0 ? (
-                    <Card className="bg-gray-900/50 border-gray-800 p-8 text-center">
-                      <p className="text-gray-400">Your cart is empty</p>
+                    <Card className="bg-zinc-900/50 border-zinc-800 p-8 text-center">
+                      <div className="space-y-4">
+                        <p className="text-gray-400 text-lg">Your cart is lonelier than a sad desk salad</p>
+                        <p className="text-[#f8f68f] font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          LET'S FIX THAT!
+                        </p>
+                      </div>
                     </Card>
                   ) : (
                     cart.map((item) => (
-                      <Card key={item.id} className="bg-gray-900/50 border-gray-800">
+                      <Card key={item.id} className="bg-zinc-900/50 border-zinc-800">
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
-                              <h3 className="text-lg font-medium text-white">{item.name}</h3>
+                              <h3 className="text-2xl font-medium text-white" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>{item.name}</h3>
                               <p className="text-gray-400 text-sm">{item.description}</p>
-                              <p className="text-white font-medium mt-2">${item.price} per person</p>
+                              <p className="text-white text-xl font-medium mt-2">£{item.price}</p>
                             </div>
                             <div className="flex items-center gap-3">
                               <Button
                                 onClick={() => updateQuantity(item.id, -1)}
                                 size="sm"
                                 variant="outline"
-                                className="border-gray-700 text-white hover:bg-gray-800"
+                                className="border-zinc-700 text-white hover:bg-zinc-800"
                               >
                                 <Minus className="h-4 w-4" />
                               </Button>
@@ -656,7 +1144,7 @@ export default function YolkBusinessPortal() {
                                 onClick={() => updateQuantity(item.id, 1)}
                                 size="sm"
                                 variant="outline"
-                                className="border-gray-700 text-white hover:bg-gray-800"
+                                className="border-zinc-700 text-white hover:bg-zinc-800"
                               >
                                 <Plus className="h-4 w-4" />
                               </Button>
@@ -669,66 +1157,80 @@ export default function YolkBusinessPortal() {
                 </div>
 
                 <div className="space-y-6">
-                  <Card className="bg-gray-900/50 border-gray-800">
+                  <Card className="bg-zinc-900/50 border-zinc-800">
                     <CardHeader>
-                      <CardTitle className="text-white">Order Details</CardTitle>
+                      <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Order Details</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-6">
+                      {/* Pickup Location */}
                       <div className="space-y-2">
-                        <Label htmlFor="date" className="text-white">
-                          Event Date
+                        <Label className="text-white flex items-center text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Pickup Location
                         </Label>
-                        <Input
-                          id="date"
-                          type="date"
-                          value={orderDate}
-                          onChange={(e) => setOrderDate(e.target.value)}
-                          min={new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]}
-                          className="bg-black/50 border-gray-700 text-white"
-                        />
+                        <div className="bg-black/30 border border-zinc-700 rounded p-3">
+                          <p className="text-white font-medium">
+                            {venues.find(v => v.id === selectedVenue)?.name}
+                          </p>
+                          <p className="text-zinc-400 text-sm">
+                            {venues.find(v => v.id === selectedVenue)?.address}
+                          </p>
+                        </div>
                       </div>
+                      
+                      {/* Pickup Time */}
                       <div className="space-y-2">
-                        <Label htmlFor="guests" className="text-white">
-                          Number of Guests
+                        <Label className="text-white flex items-center text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Pickup Time
                         </Label>
-                        <Input
-                          id="guests"
-                          type="number"
-                          placeholder="50"
-                          value={guestCount}
-                          onChange={(e) => setGuestCount(e.target.value)}
-                          className="bg-black/50 border-gray-700 text-white placeholder:text-gray-500"
-                        />
+                        <div className="bg-black/30 border border-zinc-700 rounded p-3">
+                          <p className="text-white font-medium">
+                            {new Date(selectedTime).toLocaleDateString('en-GB', { 
+                              weekday: 'long', 
+                              day: 'numeric', 
+                              month: 'long',
+                              year: 'numeric'
+                            })}
+                          </p>
+                          <p className="text-zinc-400 text-sm">
+                            {new Date(selectedTime).toLocaleTimeString('en-GB', { 
+                              hour: 'numeric', 
+                              minute: '2-digit',
+                              hour12: true
+                            })}
+                          </p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card className="bg-gray-900/50 border-gray-800">
+                  <Card className="bg-zinc-900/50 border-zinc-800">
                     <CardHeader>
-                      <CardTitle className="text-white">Total</CardTitle>
+                      <CardTitle className="text-white uppercase text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Total</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
-                        <div className="flex justify-between text-gray-400">
-                          <span>Subtotal per person</span>
-                          <span>${getTotalPrice()}</span>
+                        <div className="flex justify-between text-zinc-400">
+                          <span>Subtotal</span>
+                          <span>£{getTotalPrice()}</span>
                         </div>
                         {guestCount && (
                           <div className="flex justify-between text-white font-medium text-lg pt-2 border-t border-gray-700">
                             <span>Total ({guestCount} guests)</span>
-                            <span>${getTotalPrice() * Number.parseInt(guestCount || "0")}</span>
+                            <span>£{getTotalPrice() * Number.parseInt(guestCount || "0")}</span>
                           </div>
                         )}
                       </div>
                       <Button
-                        className="w-full mt-6 bg-white text-black hover:bg-gray-100"
-                        disabled={!orderDate || !guestCount || cart.length === 0}
+                        onClick={completeOrder}
+                        className="w-full mt-6 bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123] font-medium uppercase shadow-lg text-xl"
+                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
+                        disabled={!selectedVenue || !selectedDate || !selectedHour || cart.length === 0}
                       >
-                        Place Order
+                        {!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 ? "COMPLETE YOUR ORDER" : "YOLK YES! LET'S GO"}
                       </Button>
-                      <p className="text-xs text-gray-400 mt-2 text-center">
-                        No prepayment required. Invoice will be sent after service.
-                      </p>
+                                              <p className="text-xs text-gray-400 mt-2 text-center">
+                          Pay later, party now - we trust you!
+                        </p>
                     </CardContent>
                   </Card>
                 </div>
@@ -737,6 +1239,227 @@ export default function YolkBusinessPortal() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Product Details Modal */}
+      <Dialog open={productModalOpen} onOpenChange={closeProductModal}>
+        <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white p-0 overflow-hidden [&>button]:hidden">
+          {selectedProduct && (
+            <>
+              {/* Product Image */}
+              <div className="relative w-full aspect-video overflow-hidden">
+                <img
+                  src={selectedProduct.image || "/placeholder.svg"}
+                  alt={selectedProduct.name}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                <Badge className="absolute top-4 left-4 bg-[#f8f68f] text-black font-medium">
+                  {selectedProduct.category}
+                </Badge>
+                <Button
+                  onClick={closeProductModal}
+                  variant="ghost"
+                  size="sm"
+                  className="absolute top-4 right-4 text-white hover:bg-black/20 rounded-full w-8 h-8 p-0"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* Product Info */}
+                <div className="space-y-3">
+                  <h2 className="text-3xl font-bold uppercase text-white" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    {selectedProduct.name}
+                  </h2>
+                  <p className="text-gray-300 leading-relaxed">
+                    {selectedProduct.description}
+                  </p>
+
+                </div>
+
+                {/* Nutritional Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h4 className="text-lg font-medium text-[#f8f68f] uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      Allergens
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline" className="text-xs border-zinc-700 text-gray-300">Gluten</Badge>
+                      <Badge variant="outline" className="text-xs border-zinc-700 text-gray-300">Dairy</Badge>
+                      <Badge variant="outline" className="text-xs border-zinc-700 text-gray-300">Eggs</Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-lg font-medium text-[#f8f68f] uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      Macros (approx)
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2 text-xs text-gray-300">
+                      <div className="text-center">
+                        <div className="font-medium">420</div>
+                        <div className="text-gray-400">Calories</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium">28g</div>
+                        <div className="text-gray-400">Protein</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-medium">32g</div>
+                        <div className="text-gray-400">Carbs</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quantity Controls */}
+                <div className="flex items-center justify-between pt-4 border-t border-zinc-800">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-lg text-gray-300 font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      QUANTITY
+                    </span>
+                    <div className="flex items-center space-x-3">
+                      <Button
+                        onClick={() => setModalQuantity(Math.max(1, modalQuantity - 1))}
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 text-white hover:bg-zinc-800 rounded-full w-8 h-8 p-0"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="text-lg font-medium text-white w-8 text-center">
+                        {modalQuantity}
+                      </span>
+                      <Button
+                        onClick={() => setModalQuantity(modalQuantity + 1)}
+                        variant="outline"
+                        size="sm"
+                        className="border-zinc-700 text-white hover:bg-zinc-800 rounded-full w-8 h-8 p-0"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="text-right">
+                    <div className="text-sm text-gray-400">Total</div>
+                    <div className="text-xl font-bold text-white">
+                      £{(selectedProduct.price * modalQuantity).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Continue Button */}
+                <Button
+                  onClick={addToCartFromModal}
+                  className="w-full bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123] font-bold uppercase text-xl py-3 shadow-lg"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  ADD TO CART - £{(selectedProduct.price * modalQuantity).toFixed(2)}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Footer */}
+      <footer className="bg-black border-t border-zinc-800 mt-auto">
+        <div className="max-w-7xl mx-auto px-6 py-12">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {/* Brand Section */}
+            <div className="md:col-span-2">
+              <div className="flex items-center mb-4">
+                <img 
+                  src="/yolk-white.svg" 
+                  alt="YOLK" 
+                  className="h-14 w-auto mr-3"
+                />
+              </div>
+              <p className="text-gray-400 mb-4 max-w-md">
+                Next-level sandwiches for next-level teams. Because your office deserves better than bland.
+              </p>
+              <p className="text-[#f8f68f] font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                FROM YAWWWWN TO YOLK.
+              </p>
+            </div>
+            
+            {/* Quick Links */}
+            <div>
+              <h4 className="text-white font-bold mb-4 uppercase text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                Quick Links
+              </h4>
+              <ul className="space-y-2">
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    ORDER
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    LOCATIONS
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    MENUS
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    BREWCLUB
+                  </a>
+                </li>
+              </ul>
+            </div>
+            
+            {/* Business Info */}
+            <div>
+              <h4 className="text-white font-bold mb-4 uppercase text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                Business Orders
+              </h4>
+              <ul className="space-y-2">
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    BECOME PARTNER
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    GROUP PRICING
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    CATERING GUIDE
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    SUPPORT
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="border-t border-zinc-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
+            <p className="text-gray-400 text-sm">
+              © 2025 YOLK ALL RIGHTS RESERVED
+            </p>
+            <div className="flex items-center space-x-6 mt-4 md:mt-0">
+              <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-sm" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                PRIVACY POLICY
+              </a>
+              <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-sm" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                TERMS
+              </a>
+              <a href="#" className="text-gray-400 hover:text-[#f8f68f] transition-colors text-sm" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                CAREERS
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
