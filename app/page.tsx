@@ -896,8 +896,8 @@ export default function YolkBusinessPortal() {
 
       {/* Group Order Dashboard Modal */}
       <Dialog open={showGroupOrderDashboard} onOpenChange={setShowGroupOrderDashboard}>
-        <DialogContent className="max-w-4xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
               Group Order Dashboard
             </DialogTitle>
@@ -906,7 +906,7 @@ export default function YolkBusinessPortal() {
             </CardDescription>
           </DialogHeader>
 
-          <div className="p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
             {/* Shareable Link Section */}
             <Card className="bg-[#f8f68f]/10 border-[#f8f68f]/30">
               <CardContent className="p-4">
@@ -1048,7 +1048,7 @@ export default function YolkBusinessPortal() {
             </Card>
 
             {/* Action Buttons */}
-            <div className="flex gap-4 pt-6 border-t border-zinc-800">
+            <div className="flex gap-4 pt-6 border-t border-zinc-800 flex-shrink-0">
               <Button
                 onClick={() => setShowGroupOrderDashboard(false)}
                 variant="outline"
