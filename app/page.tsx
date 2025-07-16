@@ -1144,37 +1144,54 @@ export default function YolkBusinessPortal() {
             
             {/* Order Info Display */}
             {selectedVenue && selectedTime && (
-              <button 
-                onClick={startOrderFlow}
-                className="flex items-center space-x-4 bg-black/10 px-4 py-2 rounded-lg hover:bg-black/20 transition-colors cursor-pointer"
-                title="Click to change order details"
-              >
-                <div className="flex items-center space-x-2">
-                  {deliveryType === "delivery" ? (
-                    <Truck className="h-4 w-4 text-black" />
-                  ) : (
-                    <Building2 className="h-4 w-4 text-black" />
-                  )}
-                  <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    {venues.find(v => v.id === selectedVenue)?.name}
-                  </span>
-                </div>
-                <div className="w-px h-4 bg-black/30"></div>
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-4 w-4 text-black" />
-                  <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    {new Date(selectedTime).toLocaleDateString('en-GB', { 
-                      weekday: 'short', 
-                      day: 'numeric', 
-                      month: 'short'
-                    })} {new Date(selectedTime).toLocaleTimeString('en-GB', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })}
-                  </span>
-                </div>
-              </button>
+              <div className="flex items-center space-x-4">
+                <button 
+                  onClick={startOrderFlow}
+                  className="flex items-center space-x-4 bg-black/10 px-4 py-2 rounded-lg hover:bg-black/20 transition-colors cursor-pointer"
+                  title="Click to change order details"
+                >
+                  <div className="flex items-center space-x-2">
+                    {deliveryType === "delivery" ? (
+                      <Truck className="h-4 w-4 text-black" />
+                    ) : (
+                      <Building2 className="h-4 w-4 text-black" />
+                    )}
+                    <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      {venues.find(v => v.id === selectedVenue)?.name}
+                    </span>
+                  </div>
+                  <div className="w-px h-4 bg-black/30"></div>
+                  <div className="flex items-center space-x-2">
+                    <Calendar className="h-4 w-4 text-black" />
+                    <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      {new Date(selectedTime).toLocaleDateString('en-GB', { 
+                        weekday: 'short', 
+                        day: 'numeric', 
+                        month: 'short'
+                      })} {new Date(selectedTime).toLocaleTimeString('en-GB', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
+                    </span>
+                  </div>
+                </button>
+
+                {/* Cart Button */}
+                {getTotalItems() > 0 && (
+                  <Button
+                    onClick={() => setCurrentView("cart")}
+                    className="bg-black text-[#f8f68f] hover:bg-gray-800 relative shadow-lg font-medium uppercase text-lg px-4 py-2"
+                    style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                  >
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Cart ({getTotalItems()})
+                    <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs">
+                      {getTotalItems()}
+                    </Badge>
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -1393,27 +1410,14 @@ export default function YolkBusinessPortal() {
                   <h1 className="text-4xl font-light text-white mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Menu</h1>
                   <p className="text-gray-300">Curated selections for large groups.</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  {getTotalItems() > 0 && (
-                    <Button
-                      onClick={() => setCurrentView("cart")}
-                      className="bg-[#f8f68f] text-black hover:from-gray-100 hover:to-gray-300 relative shadow-lg font-medium uppercase text-lg"
-                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-2" />
-                      Cart ({getTotalItems()})
-                      <Badge className="absolute -top-2 -right-2 bg-red-500 text-white">{getTotalItems()}</Badge>
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => setCurrentView("hero")}
-                    variant="outline"
-                    className="border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
-                    style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                  >
-                    Back
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => setCurrentView("hero")}
+                  variant="outline"
+                  className="border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  Back
+                </Button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -1595,7 +1599,7 @@ export default function YolkBusinessPortal() {
                       <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Payment Method</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3">
                         <Card 
                           className={`cursor-pointer transition-all duration-200 ${
                             paymentMethod === "card"
