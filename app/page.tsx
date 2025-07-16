@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck } from "lucide-react"
+import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText } from "lucide-react"
 
 // Spindl API interfaces
 interface SpindlPrice {
@@ -360,6 +360,11 @@ export default function YolkBusinessPortal() {
   const [isGeocodingAddress, setIsGeocodingAddress] = useState(false)
   const [suggestedVenue, setSuggestedVenue] = useState<typeof venues[0] | null>(null)
 
+  // Payment method state
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "invoice">("card")
+  const [showInvoiceApplication, setShowInvoiceApplication] = useState(false)
+  const [isInvoiceApproved, setIsInvoiceApproved] = useState(false)
+
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
     if (selectedDate && selectedHour) {
@@ -459,6 +464,8 @@ export default function YolkBusinessPortal() {
       setShowOrderComplete(false)
       setCurrentView("hero")
       setCart([])
+      // Reset payment method to default
+      setPaymentMethod("card")
     }, 4000)
   }
 
@@ -604,12 +611,163 @@ export default function YolkBusinessPortal() {
                     hour12: true
                   })}
                 </p>
+                <p className="text-gray-400">
+                  Payment: {paymentMethod === "card" ? "Card payment" : "Invoice (30 days)"}
+                </p>
               </motion.div>
               
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Invoice Application Modal */}
+      <Dialog open={showInvoiceApplication} onOpenChange={setShowInvoiceApplication}>
+        <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+              Apply for Invoice Terms
+            </DialogTitle>
+            <CardDescription className="text-gray-400 text-center">
+              Get approved for 30-day payment terms
+            </CardDescription>
+          </DialogHeader>
+
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="company-name" className="text-white">
+                  Company name
+                </Label>
+                <Input
+                  id="company-name"
+                  placeholder="Your Company Ltd."
+                  className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-reg" className="text-white">
+                  Company registration number
+                </Label>
+                <Input
+                  id="company-reg"
+                  placeholder="12345678"
+                  className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="contact-name" className="text-white">
+                  Contact person
+                </Label>
+                <Input
+                  id="contact-name"
+                  placeholder="John Smith"
+                  className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact-email" className="text-white">
+                  Business email
+                </Label>
+                <Input
+                  id="contact-email"
+                  type="email"
+                  placeholder="john@company.com"
+                  className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="monthly-spend" className="text-white">
+                Expected monthly spend
+              </Label>
+              <Select>
+                <SelectTrigger className="bg-black/50 border-zinc-700 text-white">
+                  <SelectValue placeholder="Select expected spend" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="1000-5000">£1,000 - £5,000</SelectItem>
+                  <SelectItem value="5000-10000">£5,000 - £10,000</SelectItem>
+                  <SelectItem value="10000-25000">£10,000 - £25,000</SelectItem>
+                  <SelectItem value="25000+">£25,000+</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="order-frequency" className="text-white">
+                Order frequency
+              </Label>
+              <Select>
+                <SelectTrigger className="bg-black/50 border-zinc-700 text-white">
+                  <SelectValue placeholder="Select order frequency" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-900 border-zinc-700">
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                  <SelectItem value="biweekly">Bi-weekly</SelectItem>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="additional-info" className="text-white">
+                Additional information
+              </Label>
+              <Textarea
+                id="additional-info"
+                placeholder="Tell us about your business, typical order sizes, special requirements..."
+                className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500 min-h-[100px]"
+              />
+            </div>
+
+            <div className="bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded p-4">
+              <div className="flex items-start space-x-3">
+                <FileText className="h-5 w-5 text-[#f8f68f] mt-0.5" />
+                <div>
+                  <h4 className="text-white font-medium mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    Invoice Terms
+                  </h4>
+                  <ul className="text-gray-300 text-sm space-y-1">
+                    <li>• 30-day payment terms</li>
+                    <li>• Monthly invoicing</li>
+                    <li>• Credit limit based on business size</li>
+                    <li>• Fast approval for established businesses</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-6 border-t border-zinc-800">
+              <Button
+                onClick={() => setShowInvoiceApplication(false)}
+                variant="outline"
+                className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  // Simulate approval process
+                  setIsInvoiceApproved(true)
+                  setPaymentMethod("invoice")
+                  setShowInvoiceApplication(false)
+                }}
+                className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
+                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+              >
+                Submit Application
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Order Setup Modal */}
       <Dialog open={orderModalOpen} onOpenChange={closeOrderModal}>
@@ -1431,6 +1589,72 @@ export default function YolkBusinessPortal() {
                     </CardContent>
                   </Card>
 
+                  {/* Payment Method Selection */}
+                  <Card className="bg-zinc-900/50 border-zinc-800">
+                    <CardHeader>
+                      <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Payment Method</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-3">
+                        <Card 
+                          className={`cursor-pointer transition-all duration-200 ${
+                            paymentMethod === "card"
+                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                          }`}
+                          onClick={() => setPaymentMethod("card")}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <CreditCard className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
+                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              Card Payment
+                            </h3>
+                            <p className="text-gray-400 text-xs">Pay now with card</p>
+                          </CardContent>
+                        </Card>
+
+                        <Card 
+                          className={`cursor-pointer transition-all duration-200 ${
+                            paymentMethod === "invoice"
+                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                          }`}
+                          onClick={() => {
+                            if (!isInvoiceApproved) {
+                              setShowInvoiceApplication(true)
+                            } else {
+                              setPaymentMethod("invoice")
+                            }
+                          }}
+                        >
+                          <CardContent className="p-4 text-center">
+                            <FileText className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
+                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              Invoice
+                            </h3>
+                            <p className="text-gray-400 text-xs">
+                              {isInvoiceApproved ? "Approved - Pay later" : "Apply for invoice terms"}
+                            </p>
+                            {isInvoiceApproved && (
+                              <Badge className="mt-2 bg-green-600 text-white text-xs">APPROVED</Badge>
+                            )}
+                          </CardContent>
+                        </Card>
+                      </div>
+                      
+                      {paymentMethod === "invoice" && isInvoiceApproved && (
+                        <div className="bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded p-3">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle className="h-4 w-4 text-[#f8f68f]" />
+                            <p className="text-white text-sm">
+                              Invoice terms approved. Payment due within 30 days.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
                   <Card className="bg-zinc-900/50 border-zinc-800">
                     <CardHeader>
                       <CardTitle className="text-white uppercase text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Total</CardTitle>
@@ -1452,13 +1676,19 @@ export default function YolkBusinessPortal() {
                         onClick={completeOrder}
                         className="w-full mt-6 bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123] font-medium uppercase shadow-lg text-xl"
                         style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
-                        disabled={!selectedVenue || !selectedDate || !selectedHour || cart.length === 0}
+                        disabled={!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 || (paymentMethod === "invoice" && !isInvoiceApproved)}
                       >
-                        {!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 ? "COMPLETE YOUR ORDER" : "YOLK YES! LET'S GO"}
+                        {!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 
+                          ? "COMPLETE YOUR ORDER" 
+                          : paymentMethod === "invoice" && !isInvoiceApproved
+                          ? "APPLY FOR INVOICE TERMS"
+                          : "YOLK YES! LET'S GO"}
                       </Button>
-                                              <p className="text-xs text-gray-400 mt-2 text-center">
-                          Pay later, party now - we trust you!
-                        </p>
+                      <p className="text-xs text-gray-400 mt-2 text-center">
+                        {paymentMethod === "card" 
+                          ? "Secure payment processing" 
+                          : "Pay later, party now - we trust you!"}
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
