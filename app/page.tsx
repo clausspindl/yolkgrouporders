@@ -455,34 +455,87 @@ export default function YolkBusinessPortal() {
 
   const addToCart = (item: MenuItem) => {
     if (isGroupOrderMode) {
-      // Add to group order instead of regular cart
-      const newOrder = {
-        id: Date.now().toString(),
-        personName: "You",
-        items: [{ ...item, quantity: 1 }],
-        totalSpent: item.price,
-        timestamp: new Date()
-      }
+      // Check if user already has an order in this group
+      const existingUserOrder = groupOrders.find(order => order.personName === "You")
       
-      setGroupOrders(prev => {
-        const updatedOrders = [...prev, newOrder]
-        
-        // Save updated group orders to localStorage
-        if (groupOrderId) {
-          const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
-          if (existingData) {
-            try {
-              const groupOrderData = JSON.parse(existingData)
-              groupOrderData.orders = updatedOrders
-              localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
-            } catch (error) {
-              console.error('Error updating group order data:', error)
+      if (existingUserOrder) {
+        // Update existing user's order
+        setGroupOrders(prev => {
+          const updatedOrders = prev.map(order => {
+            if (order.personName === "You") {
+              // Check if item already exists in user's order
+              const existingItem = order.items.find(itemInOrder => itemInOrder.id === item.id)
+              if (existingItem) {
+                // Increase quantity of existing item
+                const updatedItems = order.items.map(itemInOrder =>
+                  itemInOrder.id === item.id 
+                    ? { ...itemInOrder, quantity: itemInOrder.quantity + 1 }
+                    : itemInOrder
+                )
+                return {
+                  ...order,
+                  items: updatedItems,
+                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                }
+              } else {
+                // Add new item to user's order
+                const updatedItems = [...order.items, { ...item, quantity: 1 }]
+                return {
+                  ...order,
+                  items: updatedItems,
+                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                }
+              }
+            }
+            return order
+          })
+          
+          // Save updated group orders to localStorage
+          if (groupOrderId) {
+            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+            if (existingData) {
+              try {
+                const groupOrderData = JSON.parse(existingData)
+                groupOrderData.orders = updatedOrders
+                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+              } catch (error) {
+                console.error('Error updating group order data:', error)
+              }
             }
           }
+          
+          return updatedOrders
+        })
+      } else {
+        // Create new user order
+        const newOrder = {
+          id: Date.now().toString(),
+          personName: "You",
+          items: [{ ...item, quantity: 1 }],
+          totalSpent: item.price,
+          timestamp: new Date()
         }
         
-        return updatedOrders
-      })
+        setGroupOrders(prev => {
+          const updatedOrders = [...prev, newOrder]
+          
+          // Save updated group orders to localStorage
+          if (groupOrderId) {
+            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+            if (existingData) {
+              try {
+                const groupOrderData = JSON.parse(existingData)
+                groupOrderData.orders = updatedOrders
+                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+              } catch (error) {
+                console.error('Error updating group order data:', error)
+              }
+            }
+          }
+          
+          return updatedOrders
+        })
+      }
       
       // Show YOLK YES! animation
       setShowYolkYes(true)
@@ -680,6 +733,41 @@ export default function YolkBusinessPortal() {
       // You could add a toast notification here
     } catch (err) {
       console.error('Failed to copy: ', err)
+    }
+  }
+
+  // Simulate other team members adding items (for demo purposes)
+  const simulateTeamMemberOrder = () => {
+    if (groupOrderId && menuItems.length > 0) {
+      const teamMembers = ["Sarah Johnson", "Mike Chen", "Emma Davis", "Alex Thompson"]
+      const randomMember = teamMembers[Math.floor(Math.random() * teamMembers.length)]
+      const randomItem = menuItems[Math.floor(Math.random() * menuItems.length)]
+      
+      const newOrder = {
+        id: Date.now().toString(),
+        personName: randomMember,
+        items: [{ ...randomItem, quantity: 1 }],
+        totalSpent: randomItem.price,
+        timestamp: new Date()
+      }
+      
+      setGroupOrders(prev => {
+        const updatedOrders = [...prev, newOrder]
+        
+        // Save updated group orders to localStorage
+        const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+        if (existingData) {
+          try {
+            const groupOrderData = JSON.parse(existingData)
+            groupOrderData.orders = updatedOrders
+            localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+          } catch (error) {
+            console.error('Error updating group order data:', error)
+          }
+        }
+        
+        return updatedOrders
+      })
     }
   }
 
@@ -952,6 +1040,14 @@ export default function YolkBusinessPortal() {
                   >
                     Copy
                   </Button>
+                  <Button
+                    onClick={simulateTeamMemberOrder}
+                    variant="outline"
+                    className="border-zinc-700 text-white hover:bg-zinc-800"
+                    title="Simulate team member adding item (demo)"
+                  >
+                    Demo: Add Team Item
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1128,8 +1224,8 @@ export default function YolkBusinessPortal() {
 
       {/* Order Setup Modal */}
       <Dialog open={orderModalOpen} onOpenChange={closeOrderModal}>
-        <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden max-h-[90vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
               {orderStep === 1 && "How would you like your order?"}
               {orderStep === 2 && deliveryType === "delivery" && "Enter your delivery address"}
@@ -1139,7 +1235,7 @@ export default function YolkBusinessPortal() {
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-6 p-6">
+          <div className="flex-1 overflow-y-auto space-y-6 p-6">
             {/* Step 1: Delivery Type Selection */}
             {orderStep === 1 && (
               <motion.div
@@ -1520,7 +1616,7 @@ export default function YolkBusinessPortal() {
              )}
 
             {/* Navigation Buttons */}
-            <div className="flex gap-4 pt-6 border-t border-zinc-800">
+            <div className="flex gap-4 pt-6 border-t border-zinc-800 flex-shrink-0">
               {orderStep > 1 && (
                 <Button
                   onClick={prevOrderStep}
