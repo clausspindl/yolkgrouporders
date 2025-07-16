@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X } from "lucide-react"
+import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck } from "lucide-react"
 
 // Spindl API interfaces
 interface SpindlPrice {
@@ -62,6 +62,20 @@ interface MenuItem {
 interface CartItem extends MenuItem {
   quantity: number
 }
+
+// Available venues with coordinates for distance calculation
+const venues = [
+  { id: "new-oxford-st", name: "New Oxford St", address: "102 New Oxford St, WC1A 1HB", lat: 51.5174, lng: -0.1278 },
+  { id: "broadgate", name: "Broadgate", address: "Unit 2, 1 Finsbury Avenue, EC2M 2PP", lat: 51.5198, lng: -0.0863 },
+  { id: "soho", name: "Soho", address: "19 Golden Square, London, W1F 9JJ", lat: 51.5127, lng: -0.1410 },
+  { id: "new-st-square", name: "New St. Square", address: "3a New St. Sq, London, EC4A 3BF", lat: 51.5146, lng: -0.1070 },
+  { id: "canary-wharf", name: "Canary Wharf", address: "15 Cabot Square, Unit RS-140, E14 4QT", lat: 51.5045, lng: -0.0199 },
+  { id: "london-bridge", name: "London Bridge", address: "Unit D, 7 More London Riverside, SE1 2RT", lat: 51.5045, lng: -0.0865 },
+  { id: "strand", name: "Strand", address: "82-83 Strand, WC2R 0DU", lat: 51.5099, lng: -0.1180 },
+  { id: "london-wall", name: "London Wall", address: "150-151 Salisbury House, EC2M 5QD", lat: 51.5174, lng: -0.0934 },
+  { id: "victoria", name: "Victoria", address: "Unit 14 Cardinal Place, SW1E 5JH", lat: 51.4952, lng: -0.1441 },
+  { id: "high-holborn", name: "High Holborn", address: "90 High Holborn, WC1V 6LJ", lat: 51.5174, lng: -0.1204 },
+]
 
 // Transform Spindl product to MenuItem
 const transformSpindlProduct = (product: SpindlProduct, categoryName: string): MenuItem => {
@@ -273,6 +287,45 @@ const fetchSpindlMenu = async (): Promise<MenuItem[]> => {
   }
 }
 
+// Calculate distance between two coordinates (Haversine formula)
+const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+  const R = 6371 // Radius of the Earth in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  const distance = R * c
+  return distance
+}
+
+// Find closest venue to given coordinates
+const findClosestVenue = (lat: number, lng: number) => {
+  let closestVenue = venues[0]
+  let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+  
+  venues.forEach(venue => {
+    const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+    if (distance < minDistance) {
+      minDistance = distance
+      closestVenue = venue
+    }
+  })
+  
+  return { venue: closestVenue, distance: minDistance }
+}
+
+// Simulate geocoding (in real app, use Google Maps Geocoding API)
+const geocodeAddress = async (address: string): Promise<{lat: number, lng: number} | null> => {
+  // This is a mock function - in real implementation, you'd use Google Maps Geocoding API
+  // For demo purposes, return coordinates for London center
+  if (address.trim()) {
+    return { lat: 51.5074, lng: -0.1278 }
+  }
+  return null
+}
+
 export default function YolkBusinessPortal() {
   const [currentView, setCurrentView] = useState("hero")
   const [cart, setCart] = useState<CartItem[]>([])
@@ -299,19 +352,13 @@ export default function YolkBusinessPortal() {
   const [modalQuantity, setModalQuantity] = useState(1)
   const [showOrderComplete, setShowOrderComplete] = useState(false)
 
-  // Available venues
-  const venues = [
-    { id: "new-oxford-st", name: "New Oxford St", address: "102 New Oxford St, WC1A 1HB" },
-    { id: "broadgate", name: "Broadgate", address: "Unit 2, 1 Finsbury Avenue, EC2M 2PP" },
-    { id: "soho", name: "Soho", address: "19 Golden Square, London, W1F 9JJ" },
-    { id: "new-st-square", name: "New St. Square", address: "3a New St. Sq, London, EC4A 3BF" },
-    { id: "canary-wharf", name: "Canary Wharf", address: "15 Cabot Square, Unit RS-140, E14 4QT" },
-    { id: "london-bridge", name: "London Bridge", address: "Unit D, 7 More London Riverside, SE1 2RT" },
-    { id: "strand", name: "Strand", address: "82-83 Strand, WC2R 0DU" },
-    { id: "london-wall", name: "London Wall", address: "150-151 Salisbury House, EC2M 5QD" },
-    { id: "victoria", name: "Victoria", address: "Unit 14 Cardinal Place, SW1E 5JH" },
-    { id: "high-holborn", name: "High Holborn", address: "90 High Holborn, WC1V 6LJ" },
-  ]
+  // New state for multi-step order flow
+  const [orderModalOpen, setOrderModalOpen] = useState(false)
+  const [orderStep, setOrderStep] = useState(1)
+  const [deliveryType, setDeliveryType] = useState<"delivery" | "collection" | "">("")
+  const [deliveryAddress, setDeliveryAddress] = useState("")
+  const [isGeocodingAddress, setIsGeocodingAddress] = useState(false)
+  const [suggestedVenue, setSuggestedVenue] = useState<typeof venues[0] | null>(null)
 
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
@@ -415,6 +462,71 @@ export default function YolkBusinessPortal() {
     }, 4000)
   }
 
+  // Handle address input and find closest venue
+  const handleAddressSubmit = async () => {
+    if (!deliveryAddress.trim()) return
+    
+    setIsGeocodingAddress(true)
+    try {
+      const coordinates = await geocodeAddress(deliveryAddress)
+      if (coordinates) {
+        const { venue, distance } = findClosestVenue(coordinates.lat, coordinates.lng)
+        setSuggestedVenue(venue)
+        setSelectedVenue(venue.id)
+      }
+    } catch (error) {
+      console.error('Error geocoding address:', error)
+    } finally {
+      setIsGeocodingAddress(false)
+    }
+  }
+
+  // Reset order modal state
+  const resetOrderModal = () => {
+    setOrderStep(1)
+    setDeliveryType("")
+    setDeliveryAddress("")
+    setSelectedVenue("")
+    setSelectedDate("")
+    setSelectedHour("")
+    setSuggestedVenue(null)
+  }
+
+  // Open order modal
+  const startOrderFlow = () => {
+    resetOrderModal()
+    setOrderModalOpen(true)
+  }
+
+  // Close order modal
+  const closeOrderModal = () => {
+    setOrderModalOpen(false)
+    resetOrderModal()
+  }
+
+  // Handle order flow navigation
+  const nextOrderStep = () => {
+    if (orderStep === 1 && deliveryType) {
+      setOrderStep(2)
+    } else if (orderStep === 2) {
+      if (deliveryType === "delivery" && suggestedVenue) {
+        setOrderStep(3)
+      } else if (deliveryType === "collection" && selectedVenue) {
+        setOrderStep(3)
+      }
+    } else if (orderStep === 3 && selectedDate && selectedHour) {
+      // Complete the order setup
+      setOrderModalOpen(false)
+      setCurrentView("menu")
+    }
+  }
+
+  const prevOrderStep = () => {
+    if (orderStep > 1) {
+      setOrderStep(orderStep - 1)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
       {/* YOLK YES! Animation - centered on screen */}
@@ -482,6 +594,7 @@ export default function YolkBusinessPortal() {
                   Order confirmed for {venues.find(v => v.id === selectedVenue)?.name}
                 </p>
                 <p className="text-gray-400">
+                  {deliveryType === "delivery" ? "Delivery" : "Collection"} on{" "}
                   {new Date(selectedTime).toLocaleDateString('en-GB', { 
                     weekday: 'long', 
                     day: 'numeric', 
@@ -497,6 +610,339 @@ export default function YolkBusinessPortal() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Order Setup Modal */}
+      <Dialog open={orderModalOpen} onOpenChange={closeOrderModal}>
+        <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+              {orderStep === 1 && "How would you like your order?"}
+              {orderStep === 2 && deliveryType === "delivery" && "Enter your delivery address"}
+              {orderStep === 2 && deliveryType === "collection" && "Choose your collection point"}
+              {orderStep === 3 && "When would you like it?"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 p-6">
+            {/* Step 1: Delivery Type Selection */}
+            {orderStep === 1 && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <div className="grid grid-cols-2 gap-4">
+                  <Card 
+                    className={`cursor-pointer transition-all duration-200 ${
+                      deliveryType === "delivery"
+                        ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                        : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                    }`}
+                    onClick={() => setDeliveryType("delivery")}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <Truck className="h-12 w-12 mx-auto mb-4 text-[#f8f68f]" />
+                      <h3 className="text-white font-medium text-xl uppercase mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Delivered Catering
+                      </h3>
+                      <p className="text-gray-400 text-sm">We'll bring the goods to you</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card 
+                    className={`cursor-pointer transition-all duration-200 ${
+                      deliveryType === "collection"
+                        ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                        : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                    }`}
+                    onClick={() => setDeliveryType("collection")}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <Building2 className="h-12 w-12 mx-auto mb-4 text-[#f8f68f]" />
+                      <h3 className="text-white font-medium text-xl uppercase mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Click & Collect
+                      </h3>
+                      <p className="text-gray-400 text-sm">Pick up from your chosen YOLK</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 2A: Address Input for Delivery */}
+            {orderStep === 2 && deliveryType === "delivery" && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <div className="space-y-4">
+                  <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    <MapPin className="inline h-5 w-5 mr-2" />
+                    Delivery Address
+                  </Label>
+                  <div className="flex gap-3">
+                    <Input
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      placeholder="Enter your delivery address..."
+                      className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500 flex-1"
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddressSubmit()}
+                    />
+                    <Button
+                      onClick={handleAddressSubmit}
+                      disabled={!deliveryAddress.trim() || isGeocodingAddress}
+                      className="bg-[#f8f68f] text-black hover:bg-[#e6e346]"
+                    >
+                      {isGeocodingAddress ? "Finding..." : "Find YOLK"}
+                    </Button>
+                  </div>
+                  
+                  {suggestedVenue && (
+                    <Card className="bg-[#f8f68f]/10 border-[#f8f68f]/30">
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-3">
+                          <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
+                          <div>
+                            <p className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              Closest YOLK: {suggestedVenue.name}
+                            </p>
+                            <p className="text-gray-400 text-sm">{suggestedVenue.address}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 2B: Venue Selection for Collection */}
+            {orderStep === 2 && deliveryType === "collection" && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-4"
+              >
+                <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  <Building2 className="inline h-5 w-5 mr-2" />
+                  Choose Collection Point
+                </Label>
+                <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                  {venues.map((venue) => (
+                    <Card 
+                      key={venue.id}
+                      className={`cursor-pointer transition-all duration-200 ${
+                        selectedVenue === venue.id 
+                          ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                          : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                      }`}
+                      onClick={() => setSelectedVenue(venue.id)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              {venue.name}
+                            </h3>
+                            <p className="text-gray-400 text-xs leading-tight">{venue.address}</p>
+                          </div>
+                          {selectedVenue === venue.id && (
+                            <CheckCircle className="h-5 w-5 text-[#f8f68f] ml-2 flex-shrink-0" />
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 3: Date & Time Selection */}
+            {orderStep === 3 && (
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                {/* Date Selection */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      Select Date
+                    </p>
+                    <div className="flex items-center space-x-4 text-xl">
+                      <button
+                        onClick={() => {
+                          if (calendarMonth === 0) {
+                            setCalendarMonth(11)
+                            setCalendarYear(calendarYear - 1)
+                          } else {
+                            setCalendarMonth(calendarMonth - 1)
+                          }
+                        }}
+                        disabled={(() => {
+                          const today = new Date()
+                          const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
+                          const prevMonth = calendarMonth === 0 ? 11 : calendarMonth - 1
+                          const prevYear = calendarMonth === 0 ? calendarYear - 1 : calendarYear
+                          return new Date(prevYear, prevMonth + 1, 0) < minDate
+                        })()}
+                        className="text-[#f8f68f] hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
+                      >
+                        ←
+                      </button>
+                      <p className="text-white font-medium min-w-[140px] text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        {new Date(calendarYear, calendarMonth).toLocaleDateString('en-GB', { 
+                          month: 'long', 
+                          year: 'numeric' 
+                        })}
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (calendarMonth === 11) {
+                            setCalendarMonth(0)
+                            setCalendarYear(calendarYear + 1)
+                          } else {
+                            setCalendarMonth(calendarMonth + 1)
+                          }
+                        }}
+                        className="text-[#f8f68f] hover:text-white transition-colors"
+                      >
+                        →
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-7 gap-2">
+                    {/* Calendar header */}
+                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                      <div key={day} className="text-center text-zinc-400 text-sm p-2 font-medium">
+                        {day}
+                      </div>
+                    ))}
+                    {/* Calendar days */}
+                    {Array.from({ length: 42 }, (_, i) => {
+                      const today = new Date()
+                      const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
+                      const startOfMonth = new Date(calendarYear, calendarMonth, 1)
+                      const firstDayOfWeek = startOfMonth.getDay()
+                      const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
+                      
+                      const dayNumber = i - firstDayOfWeek + 1
+                      const isValidDay = dayNumber > 0 && dayNumber <= daysInMonth
+                      const currentDate = new Date(calendarYear, calendarMonth, dayNumber)
+                      const isAvailable = isValidDay && currentDate >= minDate
+                      const dateString = currentDate.toISOString().split('T')[0]
+                      const isSelected = selectedDate === dateString
+                      
+                      if (!isValidDay) {
+                        return <div key={i} className="p-2"></div>
+                      }
+                      
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => isAvailable ? setSelectedDate(dateString) : null}
+                          className={`p-2 text-sm rounded transition-all ${
+                            isAvailable
+                              ? isSelected
+                                ? 'bg-[#f8f68f] text-black font-bold'
+                                : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
+                              : 'bg-transparent text-zinc-600 cursor-not-allowed'
+                          }`}
+                          disabled={!isAvailable}
+                        >
+                          {dayNumber}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Time Selection */}
+                <div className="space-y-3">
+                  <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    Select Time
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { display: '9:00 AM', value: '09:00' },
+                      { display: '10:00 AM', value: '10:00' },
+                      { display: '11:00 AM', value: '11:00' },
+                      { display: '12:00 PM', value: '12:00' },
+                      { display: '1:00 PM', value: '13:00' },
+                      { display: '2:00 PM', value: '14:00' },
+                      { display: '3:00 PM', value: '15:00' },
+                      { display: '4:00 PM', value: '16:00' },
+                      { display: '5:00 PM', value: '17:00' },
+                      { display: '6:00 PM', value: '18:00' },
+                      { display: '7:00 PM', value: '19:00' },
+                      { display: '8:00 PM', value: '20:00' }
+                    ].map(time => (
+                      <button
+                        key={time.value}
+                        onClick={() => setSelectedHour(time.value)}
+                        className={`p-3 text-sm rounded transition-all ${
+                          selectedHour === time.value
+                            ? 'bg-[#f8f68f] text-black font-bold'
+                            : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
+                        }`}
+                      >
+                        {time.display}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-400">
+                  Orders must be placed at least 3 days in advance
+                </p>
+              </motion.div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex gap-4 pt-6 border-t border-zinc-800">
+              {orderStep > 1 && (
+                <Button
+                  onClick={prevOrderStep}
+                  variant="outline"
+                  className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  Back
+                </Button>
+              )}
+              
+              {orderStep === 1 && (
+                <Button
+                  onClick={closeOrderModal}
+                  variant="outline"
+                  className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  Cancel
+                </Button>
+              )}
+
+              <Button
+                onClick={nextOrderStep}
+                disabled={
+                  (orderStep === 1 && !deliveryType) ||
+                  (orderStep === 2 && deliveryType === "delivery" && !suggestedVenue) ||
+                  (orderStep === 2 && deliveryType === "collection" && !selectedVenue) ||
+                  (orderStep === 3 && (!selectedDate || !selectedHour))
+                }
+                className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
+                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+              >
+                {orderStep === 3 ? "Start Ordering" : "Continue"}
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       
       {/* Navbar */}
       <nav className="fixed top-0 w-full z-50" style={{ backgroundColor: '#F8F68F' }}>
@@ -516,7 +962,7 @@ export default function YolkBusinessPortal() {
               {/* Navigation Items */}
               <div className="flex items-center space-x-6 text-xl">
                 <button 
-                  onClick={() => setCurrentView("setup")}
+                  onClick={startOrderFlow}
                   className="text-black hover:text-gray-700 font-medium" 
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
@@ -541,12 +987,16 @@ export default function YolkBusinessPortal() {
             {/* Order Info Display */}
             {selectedVenue && selectedTime && (
               <button 
-                onClick={() => setCurrentView("setup")}
+                onClick={startOrderFlow}
                 className="flex items-center space-x-4 bg-black/10 px-4 py-2 rounded-lg hover:bg-black/20 transition-colors cursor-pointer"
-                title="Click to change venue or time"
+                title="Click to change order details"
               >
                 <div className="flex items-center space-x-2">
-                  <Building2 className="h-4 w-4 text-black" />
+                  {deliveryType === "delivery" ? (
+                    <Truck className="h-4 w-4 text-black" />
+                  ) : (
+                    <Building2 className="h-4 w-4 text-black" />
+                  )}
                   <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                     {venues.find(v => v.id === selectedVenue)?.name}
                   </span>
@@ -618,7 +1068,7 @@ export default function YolkBusinessPortal() {
                   Become partner
                 </Button>
                 <Button
-                  onClick={() => setCurrentView("setup")}
+                  onClick={startOrderFlow}
                   variant="outline"
                   className="bg-[#FF6400] text-[#f8f68f] hover:from-[#e6e346] hover:to-[#d4d123] hover:text-white px-5 py-6 text-xl font-medium rounded-full transition-all duration-300 uppercase shadow-lg border-0"
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
@@ -650,228 +1100,6 @@ export default function YolkBusinessPortal() {
                   <p className="text-gray-400 text-sm">No prepayment needed - we trust you</p>
                 </div>
               </motion.div>
-            </motion.div>
-          </div>
-        )}
-
-        {currentView === "setup" && (
-          <div className="min-h-screen bg-black flex items-center justify-center pt-20">
-            <motion.div
-              key="setup"
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -50 }}
-              transition={{ duration: 0.6 }}
-              className="relative z-10 flex items-center justify-center p-6 pt-20 pb-20"
-            >
-              <Card className="w-[700px] bg-zinc-900/50 border-zinc-800 backdrop-blur-sm pt-8">
-                <CardHeader className="text-center pb-8">
-                  <CardTitle className="text-3xl font-light text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    Setup Your Order
-                  </CardTitle>
-                  <CardDescription className="text-gray-400 text-lg">
-                    Choose your pickup location and time
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-8">
-                  {/* Venue Selection */}
-                  <div className="space-y-4">
-                    <Label className="text-white text-xl font-medium uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                      <Building2 className="inline h-5 w-5 mr-2" />
-                      Pickup Location
-                    </Label>
-                    <div className="grid grid-cols-2 gap-4">
-                      {venues.map((venue) => (
-                        <Card 
-                          key={venue.id}
-                          className={`cursor-pointer transition-all duration-200 ${
-                            selectedVenue === venue.id 
-                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
-                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
-                          }`}
-                          onClick={() => setSelectedVenue(venue.id)}
-                        >
-                          <CardContent className="p-4">
-                            <div className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                                  {venue.name}
-                                </h3>
-                                <p className="text-gray-400 text-xs leading-tight">{venue.address}</p>
-                              </div>
-                              {selectedVenue === venue.id && (
-                                <CheckCircle className="h-5 w-5 text-[#f8f68f] ml-2 flex-shrink-0" />
-                              )}
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Date & Time Selection */}
-                  <div className="space-y-6 pt-10">
-                    <Label className="text-white text-2xl font-medium uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                      <Calendar className="inline h-5 w-5 mr-2" />
-                      Pickup Date & Time
-                    </Label>
-                    
-                    {/* Date Selection */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          Select Date
-                        </p>
-                        <div className="flex items-center space-x-4 text-xl">
-                          <button
-                            onClick={() => {
-                              if (calendarMonth === 0) {
-                                setCalendarMonth(11)
-                                setCalendarYear(calendarYear - 1)
-                              } else {
-                                setCalendarMonth(calendarMonth - 1)
-                              }
-                            }}
-                            disabled={(() => {
-                              const today = new Date()
-                              const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
-                              const prevMonth = calendarMonth === 0 ? 11 : calendarMonth - 1
-                              const prevYear = calendarMonth === 0 ? calendarYear - 1 : calendarYear
-                              return new Date(prevYear, prevMonth + 1, 0) < minDate
-                            })()}
-                            className="text-[#f8f68f] hover:text-white transition-colors disabled:text-zinc-600 disabled:cursor-not-allowed"
-                          >
-                            ←
-                          </button>
-                          <p className="text-white font-medium min-w-[140px] text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                            {new Date(calendarYear, calendarMonth).toLocaleDateString('en-GB', { 
-                              month: 'long', 
-                              year: 'numeric' 
-                            })}
-                          </p>
-                          <button
-                            onClick={() => {
-                              if (calendarMonth === 11) {
-                                setCalendarMonth(0)
-                                setCalendarYear(calendarYear + 1)
-                              } else {
-                                setCalendarMonth(calendarMonth + 1)
-                              }
-                            }}
-                            className="text-[#f8f68f] hover:text-white transition-colors"
-                          >
-                            →
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-7 gap-2">
-                        {/* Calendar header */}
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                          <div key={day} className="text-center text-zinc-400 text-sm p-2 font-medium">
-                            {day}
-                          </div>
-                        ))}
-                        {/* Calendar days */}
-                        {Array.from({ length: 42 }, (_, i) => {
-                          const today = new Date()
-                          const minDate = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)
-                          const startOfMonth = new Date(calendarYear, calendarMonth, 1)
-                          const firstDayOfWeek = startOfMonth.getDay()
-                          const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
-                          
-                          const dayNumber = i - firstDayOfWeek + 1
-                          const isValidDay = dayNumber > 0 && dayNumber <= daysInMonth
-                          const currentDate = new Date(calendarYear, calendarMonth, dayNumber)
-                          const isAvailable = isValidDay && currentDate >= minDate
-                          const dateString = currentDate.toISOString().split('T')[0]
-                          const isSelected = selectedDate === dateString
-                          
-                          if (!isValidDay) {
-                            return <div key={i} className="p-2"></div>
-                          }
-                          
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => isAvailable ? setSelectedDate(dateString) : null}
-                              className={`p-2 text-sm rounded transition-all ${
-                                isAvailable
-                                  ? isSelected
-                                    ? 'bg-[#f8f68f] text-black font-bold'
-                                    : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
-                                  : 'bg-transparent text-zinc-600 cursor-not-allowed'
-                              }`}
-                              disabled={!isAvailable}
-                            >
-                              {dayNumber}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Time Selection */}
-                    <div className="space-y-3">
-                      <p className="text-white text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Select Time
-                      </p>
-                      <div className="grid grid-cols-4 gap-2">
-                        {[
-                          { display: '9:00 AM', value: '09:00' },
-                          { display: '10:00 AM', value: '10:00' },
-                          { display: '11:00 AM', value: '11:00' },
-                          { display: '12:00 PM', value: '12:00' },
-                          { display: '1:00 PM', value: '13:00' },
-                          { display: '2:00 PM', value: '14:00' },
-                          { display: '3:00 PM', value: '15:00' },
-                          { display: '4:00 PM', value: '16:00' },
-                          { display: '5:00 PM', value: '17:00' },
-                          { display: '6:00 PM', value: '18:00' },
-                          { display: '7:00 PM', value: '19:00' },
-                          { display: '8:00 PM', value: '20:00' }
-                        ].map(time => (
-                          <button
-                            key={time.value}
-                            onClick={() => setSelectedHour(time.value)}
-                            className={`p-3 text-sm rounded transition-all ${
-                              selectedHour === time.value
-                                ? 'bg-[#f8f68f] text-black font-bold'
-                                : 'bg-black/30 text-white hover:bg-[#f8f68f]/20 hover:text-[#f8f68f]'
-                            }`}
-                          >
-                            {time.display}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-gray-400">
-                      Orders must be placed at least 3 days in advance
-                    </p>
-                  </div>
-
-                  <div className="flex gap-6 pt-6 pb-2">
-                    <Button
-                      onClick={() => setCurrentView("hero")}
-                      variant="outline"
-                      className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 h-12 uppercase text-xl"
-                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                    >
-                      Back
-                    </Button>
-                    <Button 
-                      onClick={() => setCurrentView("menu")}
-                      className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] h-12 uppercase font-medium text-xl"
-                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                      disabled={!selectedVenue || !selectedDate || !selectedHour}
-                    >
-                      Continue to Menu
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
             </motion.div>
           </div>
         )}
