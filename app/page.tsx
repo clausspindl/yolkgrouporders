@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText } from "lucide-react"
+import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText, Users, Link, Clock } from "lucide-react"
 
 // Spindl API interfaces
 interface SpindlPrice {
@@ -326,6 +326,8 @@ const geocodeAddress = async (address: string): Promise<{lat: number, lng: numbe
   return null
 }
 
+
+
 export default function YolkBusinessPortal() {
   const [currentView, setCurrentView] = useState("hero")
   const [cart, setCart] = useState<CartItem[]>([])
@@ -365,6 +367,22 @@ export default function YolkBusinessPortal() {
   const [showInvoiceApplication, setShowInvoiceApplication] = useState(false)
   const [isInvoiceApproved, setIsInvoiceApproved] = useState(false)
 
+  // Individual choice group order state
+  const [orderType, setOrderType] = useState<"standard" | "individual-choice" | "">("")
+  const [individualBudget, setIndividualBudget] = useState("")
+  const [teamSize, setTeamSize] = useState("")
+  const [orderDeadline, setOrderDeadline] = useState("")
+  const [groupOrderId, setGroupOrderId] = useState("")
+  const [groupOrderUrl, setGroupOrderUrl] = useState("")
+  const [showGroupOrderDashboard, setShowGroupOrderDashboard] = useState(false)
+  const [groupOrders, setGroupOrders] = useState<Array<{
+    id: string
+    personName: string
+    items: CartItem[]
+    totalSpent: number
+    timestamp: Date
+  }>>([])
+
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
     if (selectedDate && selectedHour) {
@@ -398,6 +416,50 @@ export default function YolkBusinessPortal() {
 
     loadMenu()
   }, [])
+
+  // Simulate real-time group order updates
+  useEffect(() => {
+    if (showGroupOrderDashboard && groupOrders.length === 0) {
+      // Simulate team members adding orders
+      const demoOrders = [
+        {
+          id: "1",
+          personName: "Sarah Johnson",
+          items: [
+            { id: "1", name: "Executive Breakfast Platter", description: "Premium selection of pastries, fresh fruits, artisanal coffee service", price: 28, category: "Breakfast", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
+          ],
+          totalSpent: 28,
+          timestamp: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes ago
+        },
+        {
+          id: "2",
+          personName: "Mike Chen",
+          items: [
+            { id: "2", name: "Corporate Lunch Box", description: "Gourmet sandwich, seasonal salad, premium sides, dessert", price: 35, category: "Lunch", image: "/placeholder.svg?height=200&width=300", quantity: 1 },
+            { id: "3", name: "Team Building Brunch", description: "Interactive brunch experience with live cooking stations", price: 45, category: "Brunch", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
+          ],
+          totalSpent: 80,
+          timestamp: new Date(Date.now() - 3 * 60 * 1000) // 3 minutes ago
+        },
+        {
+          id: "3",
+          personName: "Emma Davis",
+          items: [
+            { id: "4", name: "Executive Dinner Experience", description: "Multi-course fine dining with wine pairing options", price: 85, category: "Dinner", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
+          ],
+          totalSpent: 85,
+          timestamp: new Date(Date.now() - 1 * 60 * 1000) // 1 minute ago
+        }
+      ]
+
+      // Add demo orders with delays to simulate real-time updates
+      demoOrders.forEach((order, index) => {
+        setTimeout(() => {
+          setGroupOrders(prev => [...prev, order])
+        }, (index + 1) * 2000) // Add each order 2 seconds apart
+      })
+    }
+  }, [showGroupOrderDashboard, groupOrders.length])
 
   const addToCart = (item: MenuItem) => {
     setCart((prev) => {
@@ -497,6 +559,10 @@ export default function YolkBusinessPortal() {
     setSelectedDate("")
     setSelectedHour("")
     setSuggestedVenue(null)
+    setOrderType("")
+    setIndividualBudget("")
+    setTeamSize("")
+    setOrderDeadline("")
   }
 
   // Open order modal
@@ -522,15 +588,56 @@ export default function YolkBusinessPortal() {
         setOrderStep(3)
       }
     } else if (orderStep === 3 && selectedDate && selectedHour) {
-      // Complete the order setup
-      setOrderModalOpen(false)
-      setCurrentView("menu")
+      setOrderStep(4)
+    } else if (orderStep === 4) {
+      if (orderType === "standard") {
+        // Complete the order setup for standard order
+        setOrderModalOpen(false)
+        setCurrentView("menu")
+      } else if (orderType === "individual-choice" && individualBudget && teamSize) {
+        // Generate group order and show dashboard
+        const orderId = generateGroupOrderId()
+        const url = generateGroupOrderUrl(orderId)
+        setGroupOrderId(orderId)
+        setGroupOrderUrl(url)
+        setOrderModalOpen(false)
+        setShowGroupOrderDashboard(true)
+      }
     }
   }
 
   const prevOrderStep = () => {
     if (orderStep > 1) {
       setOrderStep(orderStep - 1)
+    }
+  }
+
+  // Helper functions for group orders
+  const generateGroupOrderId = (): string => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase()
+  }
+
+  const generateGroupOrderUrl = (orderId: string): string => {
+    const baseUrl = window.location.origin
+    return `${baseUrl}/group-order/${orderId}`
+  }
+
+  const getTotalGroupSpending = (orders: typeof groupOrders) => {
+    return orders.reduce((total, order) => total + order.totalSpent, 0)
+  }
+
+  const getRemainingGroupBudget = (budget: number, teamSize: number) => {
+    const totalBudget = budget * Number(teamSize)
+    const spent = getTotalGroupSpending(groupOrders)
+    return Math.max(0, totalBudget - spent)
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      // You could add a toast notification here
+    } catch (err) {
+      console.error('Failed to copy: ', err)
     }
   }
 
@@ -769,6 +876,192 @@ export default function YolkBusinessPortal() {
         </DialogContent>
       </Dialog>
 
+      {/* Group Order Dashboard Modal */}
+      <Dialog open={showGroupOrderDashboard} onOpenChange={setShowGroupOrderDashboard}>
+        <DialogContent className="max-w-4xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+              Group Order Dashboard
+            </DialogTitle>
+            <CardDescription className="text-gray-400 text-center">
+              Share the link below with your team
+            </CardDescription>
+          </DialogHeader>
+
+          <div className="p-6 space-y-6">
+            {/* Shareable Link Section */}
+            <Card className="bg-[#f8f68f]/10 border-[#f8f68f]/30">
+              <CardContent className="p-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Link className="h-5 w-5 text-[#f8f68f]" />
+                  <span className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    Shareable Link
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Input
+                    value={groupOrderUrl}
+                    readOnly
+                    className="bg-black/50 border-zinc-700 text-white flex-1"
+                  />
+                  <Button
+                    onClick={() => copyToClipboard(groupOrderUrl)}
+                    className="bg-[#f8f68f] text-black hover:bg-[#e6e346]"
+                  >
+                    Copy
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Order Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <Card className="bg-zinc-800/50 border-zinc-700">
+                <CardContent className="p-4 text-center">
+                  <Users className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
+                  <p className="text-gray-400 text-sm">Team Size</p>
+                  <p className="text-white font-bold text-xl">{teamSize}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-zinc-800/50 border-zinc-700">
+                <CardContent className="p-4 text-center">
+                  <CreditCard className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
+                  <p className="text-gray-400 text-sm">Budget per Person</p>
+                  <p className="text-white font-bold text-xl">£{individualBudget}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-zinc-800/50 border-zinc-700">
+                <CardContent className="p-4 text-center">
+                  <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
+                  <p className="text-gray-400 text-sm">Total Budget</p>
+                  <p className="text-white font-bold text-xl">£{Number(individualBudget) * Number(teamSize)}</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Live Orders Feed */}
+            <Card className="bg-zinc-800/50 border-zinc-700">
+              <CardHeader>
+                <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  Live Orders ({groupOrders.length} people)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {groupOrders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                    <p className="text-gray-400">No orders yet. Share the link to get started!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {groupOrders.map((order, index) => (
+                      <Card key={order.id} className="bg-black/30 border-zinc-600">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-[#f8f68f] rounded-full flex items-center justify-center">
+                                <span className="text-black font-bold text-sm">{index + 1}</span>
+                              </div>
+                              <div>
+                                <p className="text-white font-medium">{order.personName}</p>
+                                <p className="text-gray-400 text-sm">
+                                  {order.timestamp.toLocaleTimeString('en-GB', {
+                                    hour: 'numeric',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  })}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-white font-bold">£{order.totalSpent}</p>
+                              <p className="text-gray-400 text-sm">
+                                {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {order.items.map((item, itemIndex) => (
+                              <Badge key={itemIndex} variant="outline" className="text-xs border-zinc-600 text-gray-300">
+                                {item.quantity}x {item.name}
+                              </Badge>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Budget Overview */}
+            <Card className="bg-zinc-800/50 border-zinc-700">
+              <CardHeader>
+                <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  Budget Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Total Budget:</span>
+                    <span className="text-white font-medium">£{Number(individualBudget) * Number(teamSize)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Spent:</span>
+                    <span className="text-white font-medium">£{getTotalGroupSpending(groupOrders)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-zinc-600 pt-2">
+                    <span className="text-gray-400">Remaining:</span>
+                    <span className={`font-medium ${getRemainingGroupBudget(Number(individualBudget), Number(teamSize)) > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      £{getRemainingGroupBudget(Number(individualBudget), Number(teamSize))}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Action Buttons */}
+            <div className="flex gap-4 pt-6 border-t border-zinc-800">
+              <Button
+                onClick={() => setShowGroupOrderDashboard(false)}
+                variant="outline"
+                className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
+                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+              >
+                Close Dashboard
+              </Button>
+              <Button
+                onClick={() => {
+                  // Simulate finalizing the order
+                  setShowGroupOrderDashboard(false)
+                  setCurrentView("cart")
+                  // Add all group orders to cart
+                  const allItems: CartItem[] = []
+                  groupOrders.forEach(order => {
+                    order.items.forEach(item => {
+                      const existing = allItems.find(cartItem => cartItem.id === item.id)
+                      if (existing) {
+                        existing.quantity += item.quantity
+                      } else {
+                        allItems.push({ ...item })
+                      }
+                    })
+                  })
+                  setCart(allItems)
+                }}
+                disabled={groupOrders.length === 0}
+                className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
+                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+              >
+                Finalize Order ({groupOrders.length} people)
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Order Setup Modal */}
       <Dialog open={orderModalOpen} onOpenChange={closeOrderModal}>
         <DialogContent className="max-w-2xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden">
@@ -778,6 +1071,7 @@ export default function YolkBusinessPortal() {
               {orderStep === 2 && deliveryType === "delivery" && "Enter your delivery address"}
               {orderStep === 2 && deliveryType === "collection" && "Choose your collection point"}
               {orderStep === 3 && "When would you like it?"}
+              {orderStep === 4 && "What type of order?"}
             </DialogTitle>
           </DialogHeader>
 
@@ -1053,11 +1347,113 @@ export default function YolkBusinessPortal() {
                   </div>
                 </div>
 
-                <p className="text-sm text-gray-400">
-                  Orders must be placed at least 3 days in advance
-                </p>
-              </motion.div>
-            )}
+                                 <p className="text-sm text-gray-400">
+                   Orders must be placed at least 3 days in advance
+                 </p>
+               </motion.div>
+             )}
+
+             {/* Step 4: Order Type Selection */}
+             {orderStep === 4 && (
+               <motion.div
+                 initial={{ opacity: 0, x: 50 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 className="space-y-6"
+               >
+                 <div className="grid grid-cols-1 gap-4">
+                   <Card 
+                     className={`cursor-pointer transition-all duration-200 ${
+                       orderType === "standard"
+                         ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                         : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                     }`}
+                     onClick={() => setOrderType("standard")}
+                   >
+                     <CardContent className="p-6 text-center">
+                       <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-[#f8f68f]" />
+                       <h3 className="text-white font-medium text-xl uppercase mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                         Standard Order
+                       </h3>
+                       <p className="text-gray-400 text-sm">Order items for the whole team</p>
+                     </CardContent>
+                   </Card>
+
+                   <Card 
+                     className={`cursor-pointer transition-all duration-200 ${
+                       orderType === "individual-choice"
+                         ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                         : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                     }`}
+                     onClick={() => setOrderType("individual-choice")}
+                   >
+                     <CardContent className="p-6 text-center">
+                       <Users className="h-12 w-12 mx-auto mb-4 text-[#f8f68f]" />
+                       <h3 className="text-white font-medium text-xl uppercase mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                         Individual Choice
+                       </h3>
+                       <p className="text-gray-400 text-sm">Let each team member choose their own items</p>
+                     </CardContent>
+                   </Card>
+                 </div>
+
+                 {/* Individual Choice Configuration */}
+                 {orderType === "individual-choice" && (
+                   <motion.div
+                     initial={{ opacity: 0, y: 20 }}
+                     animate={{ opacity: 1, y: 0 }}
+                     className="space-y-4 p-4 bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded"
+                   >
+                     <h4 className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                       Configure Individual Choice Order
+                     </h4>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                       <div className="space-y-2">
+                         <Label className="text-white">Budget per person</Label>
+                         <Input
+                           value={individualBudget}
+                           onChange={(e) => setIndividualBudget(e.target.value)}
+                           placeholder="£25"
+                           className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                         />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-white">Team size</Label>
+                         <Input
+                           value={teamSize}
+                           onChange={(e) => setTeamSize(e.target.value)}
+                           placeholder="10"
+                           className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                         />
+                       </div>
+                     </div>
+
+                     <div className="space-y-2">
+                       <Label className="text-white">Order deadline</Label>
+                       <Input
+                         value={orderDeadline}
+                         onChange={(e) => setOrderDeadline(e.target.value)}
+                         placeholder="2 days before pickup"
+                         className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+                       />
+                     </div>
+
+                     <div className="bg-black/30 border border-zinc-700 rounded p-3">
+                       <div className="flex items-center space-x-2 mb-2">
+                         <Users className="h-4 w-4 text-[#f8f68f]" />
+                         <span className="text-white font-medium">How it works:</span>
+                       </div>
+                       <ul className="text-gray-300 text-sm space-y-1">
+                         <li>• Generate a shareable link for your team</li>
+                         <li>• Each person chooses items within their budget</li>
+                         <li>• See all orders in real-time dashboard</li>
+                         <li>• Finalize when everyone has ordered</li>
+                       </ul>
+                     </div>
+                   </motion.div>
+                 )}
+               </motion.div>
+             )}
 
             {/* Navigation Buttons */}
             <div className="flex gap-4 pt-6 border-t border-zinc-800">
@@ -1089,12 +1485,14 @@ export default function YolkBusinessPortal() {
                   (orderStep === 1 && !deliveryType) ||
                   (orderStep === 2 && deliveryType === "delivery" && !suggestedVenue) ||
                   (orderStep === 2 && deliveryType === "collection" && !selectedVenue) ||
-                  (orderStep === 3 && (!selectedDate || !selectedHour))
+                  (orderStep === 3 && (!selectedDate || !selectedHour)) ||
+                  (orderStep === 4 && !orderType) ||
+                  (orderStep === 4 && orderType === "individual-choice" && (!individualBudget || !teamSize))
                 }
                 className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
                 style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
               >
-                {orderStep === 3 ? "Start Ordering" : "Continue"}
+                {orderStep === 4 ? "Create Order" : "Continue"}
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </div>
