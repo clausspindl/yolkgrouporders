@@ -418,49 +418,40 @@ export default function YolkBusinessPortal() {
     loadMenu()
   }, [])
 
-  // Simulate real-time group order updates
+  // Handle group order URL parameters
   useEffect(() => {
-    if (showGroupOrderDashboard && groupOrders.length === 0) {
-      // Simulate team members adding orders
-      const demoOrders = [
-        {
-          id: "1",
-          personName: "Sarah Johnson",
-          items: [
-            { id: "1", name: "Executive Breakfast Platter", description: "Premium selection of pastries, fresh fruits, artisanal coffee service", price: 28, category: "Breakfast", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
-          ],
-          totalSpent: 28,
-          timestamp: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes ago
-        },
-        {
-          id: "2",
-          personName: "Mike Chen",
-          items: [
-            { id: "2", name: "Corporate Lunch Box", description: "Gourmet sandwich, seasonal salad, premium sides, dessert", price: 35, category: "Lunch", image: "/placeholder.svg?height=200&width=300", quantity: 1 },
-            { id: "3", name: "Team Building Brunch", description: "Interactive brunch experience with live cooking stations", price: 45, category: "Brunch", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
-          ],
-          totalSpent: 80,
-          timestamp: new Date(Date.now() - 3 * 60 * 1000) // 3 minutes ago
-        },
-        {
-          id: "3",
-          personName: "Emma Davis",
-          items: [
-            { id: "4", name: "Executive Dinner Experience", description: "Multi-course fine dining with wine pairing options", price: 85, category: "Dinner", image: "/placeholder.svg?height=200&width=300", quantity: 1 }
-          ],
-          totalSpent: 85,
-          timestamp: new Date(Date.now() - 1 * 60 * 1000) // 1 minute ago
+    const urlParams = new URLSearchParams(window.location.search)
+    const groupOrderId = urlParams.get('group-order')
+    
+    if (groupOrderId) {
+      // Check if this is a valid group order ID
+      // In a real app, you'd fetch the group order details from your backend
+      // For now, we'll simulate finding an existing group order
+      const existingGroupOrder = localStorage.getItem(`groupOrder_${groupOrderId}`)
+      
+      if (existingGroupOrder) {
+        try {
+          const groupOrderData = JSON.parse(existingGroupOrder)
+          setGroupOrderId(groupOrderId)
+          setGroupOrderUrl(window.location.href)
+          setIndividualBudget(groupOrderData.budget || "25")
+          setTeamSize(groupOrderData.teamSize || "10")
+          setOrderDeadline(groupOrderData.deadline || "2 days before pickup")
+          setGroupOrders(groupOrderData.orders || [])
+          setSelectedVenue(groupOrderData.venue || "")
+          setSelectedTime(groupOrderData.time || "")
+          setDeliveryType(groupOrderData.deliveryType || "collection")
+          setIsGroupOrderMode(true)
+          setCurrentView("menu")
+        } catch (error) {
+          console.error('Error parsing group order data:', error)
         }
-      ]
-
-      // Add demo orders with delays to simulate real-time updates
-      demoOrders.forEach((order, index) => {
-        setTimeout(() => {
-          setGroupOrders(prev => [...prev, order])
-        }, (index + 1) * 2000) // Add each order 2 seconds apart
-      })
+      } else {
+        // If no existing group order found, show an error or create a new one
+        console.log('No existing group order found for ID:', groupOrderId)
+      }
     }
-  }, [showGroupOrderDashboard, groupOrders.length])
+  }, [])
 
   const addToCart = (item: MenuItem) => {
     if (isGroupOrderMode) {
@@ -472,7 +463,26 @@ export default function YolkBusinessPortal() {
         totalSpent: item.price,
         timestamp: new Date()
       }
-      setGroupOrders(prev => [...prev, newOrder])
+      
+      setGroupOrders(prev => {
+        const updatedOrders = [...prev, newOrder]
+        
+        // Save updated group orders to localStorage
+        if (groupOrderId) {
+          const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+          if (existingData) {
+            try {
+              const groupOrderData = JSON.parse(existingData)
+              groupOrderData.orders = updatedOrders
+              localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+            } catch (error) {
+              console.error('Error updating group order data:', error)
+            }
+          }
+        }
+        
+        return updatedOrders
+      })
       
       // Show YOLK YES! animation
       setShowYolkYes(true)
@@ -618,6 +628,20 @@ export default function YolkBusinessPortal() {
         const url = generateGroupOrderUrl(orderId)
         setGroupOrderId(orderId)
         setGroupOrderUrl(url)
+        
+        // Save group order data to localStorage for URL sharing
+        const groupOrderData = {
+          budget: individualBudget,
+          teamSize: teamSize,
+          deadline: orderDeadline,
+          venue: selectedVenue,
+          time: selectedTime,
+          deliveryType: deliveryType,
+          orders: [],
+          createdAt: new Date().toISOString()
+        }
+        localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
+        
         setOrderModalOpen(false)
         setShowGroupOrderDashboard(true)
       }
@@ -1062,6 +1086,7 @@ export default function YolkBusinessPortal() {
                   // Finalize the group order
                   setShowGroupOrderDashboard(false)
                   setCurrentView("cart")
+                  
                   // Add all group orders to cart
                   const allItems: CartItem[] = []
                   groupOrders.forEach(order => {
@@ -1075,6 +1100,20 @@ export default function YolkBusinessPortal() {
                     })
                   })
                   setCart(allItems)
+                  
+                  // Clear URL parameters and localStorage
+                  if (groupOrderId) {
+                    localStorage.removeItem(`groupOrder_${groupOrderId}`)
+                    // Update URL to remove group-order parameter
+                    const url = new URL(window.location.href)
+                    url.searchParams.delete('group-order')
+                    window.history.replaceState({}, '', url.toString())
+                  }
+                  
+                  // Reset group order mode
+                  setIsGroupOrderMode(false)
+                  setGroupOrderId("")
+                  setGroupOrderUrl("")
                 }}
                 disabled={groupOrders.length === 0}
                 className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
