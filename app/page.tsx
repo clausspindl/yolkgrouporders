@@ -430,7 +430,7 @@ const GoogleMapComponent = ({
               }
             }}
             placeholder="Enter your delivery address..."
-            className="h-14 pl-10 bg-white/50 border-zinc-200 text-white placeholder:text-gray-500"
+            className="h-14 pl-10 bg-white/50 border-zinc-200 text-black placeholder:text-gray-500"
             disabled={isGeocodingAddress}
           />
           {isGeocodingAddress && (
