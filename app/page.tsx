@@ -1186,9 +1186,42 @@ export default function YolkBusinessPortal() {
     setIsGroupOrderMode(false)
   }
 
+  // Reset order modal state but preserve selected venue
+  const resetOrderModalPreserveVenue = () => {
+    const currentSelectedVenue = selectedVenue // Save current venue
+    setOrderStep(1)
+    setDeliveryType("")
+    setDeliveryAddress("")
+    setSelectedVenue(currentSelectedVenue) // Restore venue
+    setSelectedDate("")
+    setSelectedHour("")
+    setSuggestedVenue(null)
+    setOrderType("")
+    setIndividualBudget("")
+    setTeamSize("")
+    setOrderDeadline("")
+    setIsGroupOrderMode(false)
+  }
+
   // Open order modal
   const startOrderFlow = () => {
-    resetOrderModal()
+    resetOrderModalPreserveVenue()
+    
+    // Auto-detect delivery type and skip steps if venue is already selected
+    if (selectedVenue) {
+      // If they have a selected venue, determine delivery type based on address
+      if (deliveryAddress && deliveryAddress.trim() !== "") {
+        // They entered an address, so it's delivery
+        setDeliveryType("delivery")
+        setSuggestedVenue(venues.find(v => v.id === selectedVenue) || null)
+        setOrderStep(3) // Skip to date/time selection
+      } else {
+        // No address entered, so it's collection
+        setDeliveryType("collection")
+        setOrderStep(3) // Skip to date/time selection
+      }
+    }
+    
     setOrderModalOpen(true)
   }
 
@@ -1243,7 +1276,12 @@ export default function YolkBusinessPortal() {
 
   const prevOrderStep = () => {
     if (orderStep > 1) {
-      setOrderStep(orderStep - 1)
+      // If we're on step 3 and we skipped venue selection, go back to step 1
+      if (orderStep === 3 && selectedVenue) {
+        setOrderStep(1)
+      } else {
+        setOrderStep(orderStep - 1)
+      }
     }
   }
 
@@ -1814,7 +1852,12 @@ export default function YolkBusinessPortal() {
                       <h3 className="text-white font-medium text-xl uppercase mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                         Click & Collect
                       </h3>
-                      <p className="text-gray-400 text-sm">Pick up from your chosen YOLK</p>
+                      <p className="text-gray-400 text-sm">
+                        {selectedVenue 
+                          ? `Pick up from YOLK ${venues.find(v => v.id === selectedVenue)?.name}`
+                          : "Pick up from your chosen YOLK"
+                        }
+                      </p>
                     </CardContent>
                   </Card>
                 </div>
@@ -1913,6 +1956,27 @@ export default function YolkBusinessPortal() {
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-6"
               >
+                {/* Auto-selected venue summary (when skipping steps) */}
+                {selectedVenue && (
+                  <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-4">
+                    <div className="flex items-center space-x-3">
+                      <CheckCircle className="h-6 w-6 text-[#f8f68f]" />
+                      <div>
+                        <h4 className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          {deliveryType === "delivery" ? "Delivery from" : "Collection from"}: YOLK {venues.find(v => v.id === selectedVenue)?.name}
+                        </h4>
+                        <p className="text-gray-300 text-sm">
+                          {venues.find(v => v.id === selectedVenue)?.address}
+                        </p>
+                        {deliveryType === "delivery" && deliveryAddress && (
+                          <p className="text-gray-300 text-sm mt-1">
+                            <strong>Delivery to:</strong> {deliveryAddress}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {/* Date Selection */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
