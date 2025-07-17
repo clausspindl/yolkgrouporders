@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText, Users, Link, Clock, Search } from "lucide-react"
+import { supabase, type RealtimeGroupOrder, type RealtimeGroupOrderItem } from "@/lib/supabase"
 
 // Google Maps types
 declare global {
@@ -923,6 +924,7 @@ export default function YolkBusinessPortal() {
     timestamp: Date
   }>>([])
   const [isGroupOrderMode, setIsGroupOrderMode] = useState(false)
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
 
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
@@ -958,129 +960,340 @@ export default function YolkBusinessPortal() {
     loadMenu()
   }, [])
 
-  // Handle group order URL parameters
+  // Handle group order URL parameters and real-time subscriptions
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const groupOrderId = urlParams.get('group-order')
     
     if (groupOrderId) {
-      // Check if this is a valid group order ID
-      // In a real app, you'd fetch the group order details from your backend
-      // For now, we'll simulate finding an existing group order
-      const existingGroupOrder = localStorage.getItem(`groupOrder_${groupOrderId}`)
-      
-      if (existingGroupOrder) {
+      // Set up real-time subscription for group order updates
+      const setupRealtimeSubscription = async () => {
         try {
-          const groupOrderData = JSON.parse(existingGroupOrder)
+          // Fetch initial group order data from Supabase
+          const { data: groupOrderData, error: groupOrderError } = await supabase
+            .from('group_orders')
+            .select('*')
+            .eq('id', groupOrderId)
+            .single()
+
+          if (groupOrderError) {
+            console.error('Error fetching group order:', groupOrderError)
+            // Fallback to localStorage for demo
+            const existingGroupOrder = localStorage.getItem(`groupOrder_${groupOrderId}`)
+            if (existingGroupOrder) {
+              const parsedData = JSON.parse(existingGroupOrder)
+              setGroupOrderId(groupOrderId)
+              setGroupOrderUrl(window.location.href)
+              setIndividualBudget(parsedData.budget || "25")
+              setTeamSize(parsedData.teamSize || "10")
+              setOrderDeadline(parsedData.deadline || "2 days before pickup")
+              setGroupOrders(parsedData.orders || [])
+              setSelectedVenue(parsedData.venue || "")
+              setSelectedTime(parsedData.time || "")
+              setDeliveryType(parsedData.deliveryType || "collection")
+              setIsGroupOrderMode(true)
+              setCurrentView("menu")
+            }
+            return
+          }
+
+          // Set group order data
           setGroupOrderId(groupOrderId)
           setGroupOrderUrl(window.location.href)
-          setIndividualBudget(groupOrderData.budget || "25")
-          setTeamSize(groupOrderData.teamSize || "10")
+          setIndividualBudget(groupOrderData.budget?.toString() || "25")
+          setTeamSize(groupOrderData.team_size?.toString() || "10")
           setOrderDeadline(groupOrderData.deadline || "2 days before pickup")
-          setGroupOrders(groupOrderData.orders || [])
           setSelectedVenue(groupOrderData.venue || "")
           setSelectedTime(groupOrderData.time || "")
-          setDeliveryType(groupOrderData.deliveryType || "collection")
+          setDeliveryType(groupOrderData.delivery_type || "collection")
+          setDeliveryAddress(groupOrderData.delivery_address || "")
           setIsGroupOrderMode(true)
           setCurrentView("menu")
+
+          // Fetch group order items
+          const { data: itemsData, error: itemsError } = await supabase
+            .from('group_order_items')
+            .select('*')
+            .eq('group_order_id', groupOrderId)
+            .order('created_at', { ascending: true })
+
+          if (itemsError) {
+            console.error('Error fetching group order items:', itemsError)
+            return
+          }
+
+          // Transform items to match our local format
+          const transformedOrders = transformSupabaseItemsToLocalFormat(itemsData)
+          setGroupOrders(transformedOrders)
+
+          // Set up real-time subscription for group order items
+          const subscription = supabase
+            .channel(`group-order-${groupOrderId}`)
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'group_order_items',
+                filter: `group_order_id=eq.${groupOrderId}`
+              },
+              (payload) => {
+                setIsRealtimeConnected(true)
+                console.log('Real-time update received:', payload)
+                
+                if (payload.eventType === 'INSERT') {
+                  // New item added
+                  const newItem = payload.new as RealtimeGroupOrderItem
+                  setGroupOrders(prev => {
+                    // Check if person already has an order
+                    const existingPersonOrder = prev.find(order => order.personName === newItem.person_name)
+                    
+                    if (existingPersonOrder) {
+                      // Update existing person's order
+                      const updatedOrders = prev.map(order => {
+                        if (order.personName === newItem.person_name) {
+                          const newCartItem = {
+                            id: newItem.product_id,
+                            name: newItem.product_name,
+                            description: newItem.product_description,
+                            price: newItem.product_price,
+                            category: newItem.product_category,
+                            image: newItem.product_image,
+                            quantity: newItem.quantity
+                          }
+                          
+                          // Check if item already exists
+                          const existingItem = order.items.find(item => item.id === newItem.product_id)
+                          if (existingItem) {
+                            // Update quantity
+                            const updatedItems = order.items.map(item =>
+                              item.id === newItem.product_id 
+                                ? { ...item, quantity: item.quantity + newItem.quantity }
+                                : item
+                            )
+                            return {
+                              ...order,
+                              items: updatedItems,
+                              totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                            }
+                          } else {
+                            // Add new item
+                            const updatedItems = [...order.items, newCartItem]
+                            return {
+                              ...order,
+                              items: updatedItems,
+                              totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                            }
+                          }
+                        }
+                        return order
+                      })
+                      return updatedOrders
+                    } else {
+                      // Create new person's order
+                      const newOrder = {
+                        id: newItem.id,
+                        personName: newItem.person_name,
+                        items: [{
+                          id: newItem.product_id,
+                          name: newItem.product_name,
+                          description: newItem.product_description,
+                          price: newItem.product_price,
+                          category: newItem.product_category,
+                          image: newItem.product_image,
+                          quantity: newItem.quantity
+                        }],
+                        totalSpent: newItem.total_spent,
+                        timestamp: new Date(newItem.created_at)
+                      }
+                      return [...prev, newOrder]
+                    }
+                  })
+                } else if (payload.eventType === 'UPDATE') {
+                  // Item updated
+                  const updatedItem = payload.new as RealtimeGroupOrderItem
+                  setGroupOrders(prev => 
+                    prev.map(order => {
+                      if (order.personName === updatedItem.person_name) {
+                        const updatedItems = order.items.map(item =>
+                          item.id === updatedItem.product_id 
+                            ? { ...item, quantity: updatedItem.quantity }
+                            : item
+                        )
+                        return {
+                          ...order,
+                          items: updatedItems,
+                          totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                        }
+                      }
+                      return order
+                    })
+                  )
+                } else if (payload.eventType === 'DELETE') {
+                  // Item deleted
+                  const deletedItem = payload.old as RealtimeGroupOrderItem
+                  setGroupOrders(prev => 
+                    prev.map(order => {
+                      if (order.personName === deletedItem.person_name) {
+                        const updatedItems = order.items.filter(item => item.id !== deletedItem.product_id)
+                        return {
+                          ...order,
+                          items: updatedItems,
+                          totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                        }
+                      }
+                      return order
+                    }).filter(order => order.items.length > 0)
+                  )
+                }
+              }
+            )
+            .subscribe((status) => {
+              console.log('Subscription status:', status)
+              if (status === 'SUBSCRIBED') {
+                setIsRealtimeConnected(true)
+              }
+            })
+
+          // Cleanup subscription on unmount
+          return () => {
+            subscription.unsubscribe()
+            setIsRealtimeConnected(false)
+          }
         } catch (error) {
-          console.error('Error parsing group order data:', error)
+          console.error('Error setting up real-time subscription:', error)
         }
-      } else {
-        // If no existing group order found, show an error or create a new one
-        console.log('No existing group order found for ID:', groupOrderId)
       }
+
+      setupRealtimeSubscription()
     }
   }, [])
 
-  const addToCart = (item: MenuItem) => {
-    if (isGroupOrderMode) {
-      // Check if user already has an order in this group
-      const existingUserOrder = groupOrders.find(order => order.personName === "You")
-      
-      if (existingUserOrder) {
-        // Update existing user's order
-        setGroupOrders(prev => {
-          const updatedOrders = prev.map(order => {
-            if (order.personName === "You") {
-              // Check if item already exists in user's order
-              const existingItem = order.items.find(itemInOrder => itemInOrder.id === item.id)
-              if (existingItem) {
-                // Increase quantity of existing item
-                const updatedItems = order.items.map(itemInOrder =>
-                  itemInOrder.id === item.id 
-                    ? { ...itemInOrder, quantity: itemInOrder.quantity + 1 }
-                    : itemInOrder
-                )
-                return {
-                  ...order,
-                  items: updatedItems,
-                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                }
-              } else {
-                // Add new item to user's order
-                const updatedItems = [...order.items, { ...item, quantity: 1 }]
-                return {
-                  ...order,
-                  items: updatedItems,
-                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                }
-              }
-            }
-            return order
-          })
-          
-          // Save updated group orders to localStorage
-          if (groupOrderId) {
-            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
-            if (existingData) {
-              try {
-                const groupOrderData = JSON.parse(existingData)
-                groupOrderData.orders = updatedOrders
-                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
-              } catch (error) {
-                console.error('Error updating group order data:', error)
-              }
-            }
-          }
-          
-          return updatedOrders
+  // Helper function to transform Supabase items to local format
+  const transformSupabaseItemsToLocalFormat = (items: RealtimeGroupOrderItem[]) => {
+    const ordersMap = new Map<string, {
+      id: string
+      personName: string
+      items: CartItem[]
+      totalSpent: number
+      timestamp: Date
+    }>()
+
+    items.forEach(item => {
+      if (!ordersMap.has(item.person_name)) {
+        ordersMap.set(item.person_name, {
+          id: item.id,
+          personName: item.person_name,
+          items: [],
+          totalSpent: 0,
+          timestamp: new Date(item.created_at)
         })
+      }
+
+      const order = ordersMap.get(item.person_name)!
+      const existingItem = order.items.find(cartItem => cartItem.id === item.product_id)
+      
+      if (existingItem) {
+        existingItem.quantity += item.quantity
       } else {
-        // Create new user order
-        const newOrder = {
-          id: Date.now().toString(),
-          personName: "You",
-          items: [{ ...item, quantity: 1 }],
-          totalSpent: item.price,
-          timestamp: new Date()
-        }
-        
-        setGroupOrders(prev => {
-          const updatedOrders = [...prev, newOrder]
-          
-          // Save updated group orders to localStorage
-          if (groupOrderId) {
-            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
-            if (existingData) {
-              try {
-                const groupOrderData = JSON.parse(existingData)
-                groupOrderData.orders = updatedOrders
-                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
-              } catch (error) {
-                console.error('Error updating group order data:', error)
-              }
-            }
-          }
-          
-          return updatedOrders
+        order.items.push({
+          id: item.product_id,
+          name: item.product_name,
+          description: item.product_description,
+          price: item.product_price,
+          category: item.product_category,
+          image: item.product_image,
+          quantity: item.quantity
         })
       }
       
-      // Show YOLK YES! animation
-      setShowYolkYes(true)
-      setTimeout(() => setShowYolkYes(false), 2000)
+      order.totalSpent = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+    })
+
+    return Array.from(ordersMap.values())
+  }
+
+  const addToCart = async (item: MenuItem) => {
+    if (isGroupOrderMode && groupOrderId) {
+      try {
+        // Check if user already has an order in this group
+        const existingUserOrder = groupOrders.find(order => order.personName === "You")
+        
+        if (existingUserOrder) {
+          // Check if item already exists in user's order
+          const existingItem = existingUserOrder.items.find(itemInOrder => itemInOrder.id === item.id)
+          
+          if (existingItem) {
+            // Update quantity of existing item in Supabase
+            const { error } = await supabase
+              .from('group_order_items')
+              .update({ 
+                quantity: existingItem.quantity + 1,
+                total_spent: (existingItem.quantity + 1) * item.price
+              })
+              .eq('group_order_id', groupOrderId)
+              .eq('person_name', 'You')
+              .eq('product_id', item.id)
+            
+            if (error) {
+              console.error('Error updating item in Supabase:', error)
+              // Fallback to localStorage
+              updateGroupOrderLocally(item, true)
+            }
+          } else {
+            // Add new item to Supabase
+            const { error } = await supabase
+              .from('group_order_items')
+              .insert({
+                group_order_id: groupOrderId,
+                person_name: 'You',
+                product_id: item.id,
+                product_name: item.name,
+                product_description: item.description,
+                product_price: item.price,
+                product_category: item.category,
+                product_image: item.image,
+                quantity: 1,
+                total_spent: item.price
+              })
+            
+            if (error) {
+              console.error('Error adding item to Supabase:', error)
+              // Fallback to localStorage
+              updateGroupOrderLocally(item, false)
+            }
+          }
+        } else {
+          // Create new user order in Supabase
+          const { error } = await supabase
+            .from('group_order_items')
+            .insert({
+              group_order_id: groupOrderId,
+              person_name: 'You',
+              product_id: item.id,
+              product_name: item.name,
+              product_description: item.description,
+              product_price: item.price,
+              product_category: item.category,
+              product_image: item.image,
+              quantity: 1,
+              total_spent: item.price
+            })
+          
+          if (error) {
+            console.error('Error creating new order in Supabase:', error)
+            // Fallback to localStorage
+            updateGroupOrderLocally(item, false)
+          }
+        }
+             } catch (error) {
+         console.error('Error adding to group order:', error)
+         // Fallback to localStorage
+         const existingUserOrder = groupOrders.find(order => order.personName === "You")
+         updateGroupOrderLocally(item, existingUserOrder?.items.find((itemInOrder: CartItem) => itemInOrder.id === item.id) ? true : false)
+       }
     } else {
+      // Standard cart (not group order)
       setCart((prev) => {
         const existing = prev.find((cartItem) => cartItem.id === item.id)
         if (existing) {
@@ -1090,10 +1303,91 @@ export default function YolkBusinessPortal() {
         }
         return [...prev, { ...item, quantity: 1 }]
       })
+    }
+    
+    // Show YOLK YES! animation
+    setShowYolkYes(true)
+    setTimeout(() => setShowYolkYes(false), 2000)
+  }
+
+  // Fallback function for localStorage when Supabase is not available
+  const updateGroupOrderLocally = (item: MenuItem, isExistingItem: boolean) => {
+    const existingUserOrder = groupOrders.find(order => order.personName === "You")
+    
+    if (existingUserOrder) {
+      setGroupOrders(prev => {
+        const updatedOrders = prev.map(order => {
+          if (order.personName === "You") {
+            if (isExistingItem) {
+              // Increase quantity of existing item
+              const updatedItems = order.items.map(itemInOrder =>
+                itemInOrder.id === item.id 
+                  ? { ...itemInOrder, quantity: itemInOrder.quantity + 1 }
+                  : itemInOrder
+              )
+              return {
+                ...order,
+                items: updatedItems,
+                totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+              }
+            } else {
+              // Add new item to user's order
+              const updatedItems = [...order.items, { ...item, quantity: 1 }]
+              return {
+                ...order,
+                items: updatedItems,
+                totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+              }
+            }
+          }
+          return order
+        })
+        
+        // Save updated group orders to localStorage
+        if (groupOrderId) {
+          const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+          if (existingData) {
+            try {
+              const groupOrderData = JSON.parse(existingData)
+              groupOrderData.orders = updatedOrders
+              localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+            } catch (error) {
+              console.error('Error updating group order data:', error)
+            }
+          }
+        }
+        
+        return updatedOrders
+      })
+    } else {
+      // Create new user order
+      const newOrder = {
+        id: Date.now().toString(),
+        personName: "You",
+        items: [{ ...item, quantity: 1 }],
+        totalSpent: item.price,
+        timestamp: new Date()
+      }
       
-      // Show YOLK YES! animation
-      setShowYolkYes(true)
-      setTimeout(() => setShowYolkYes(false), 2000)
+      setGroupOrders(prev => {
+        const updatedOrders = [...prev, newOrder]
+        
+        // Save updated group orders to localStorage
+        if (groupOrderId) {
+          const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+          if (existingData) {
+            try {
+              const groupOrderData = JSON.parse(existingData)
+              groupOrderData.orders = updatedOrders
+              localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+            } catch (error) {
+              console.error('Error updating group order data:', error)
+            }
+          }
+        }
+        
+        return updatedOrders
+      })
     }
   }
 
@@ -1255,19 +1549,57 @@ export default function YolkBusinessPortal() {
         setGroupOrderId(orderId)
         setGroupOrderUrl(url)
         
-        // Save group order data to localStorage for URL sharing
-        const groupOrderData = {
-          budget: individualBudget,
-          teamSize: teamSize,
-          deadline: orderDeadline,
-          venue: selectedVenue,
-          time: selectedTime,
-          deliveryType: deliveryType,
-          orders: [],
-          createdAt: new Date().toISOString()
+        // Create group order in Supabase
+        const createGroupOrder = async () => {
+          try {
+            const { error } = await supabase
+              .from('group_orders')
+              .insert({
+                id: orderId,
+                budget: Number(individualBudget),
+                team_size: Number(teamSize),
+                deadline: orderDeadline,
+                venue: selectedVenue,
+                time: selectedTime,
+                delivery_type: deliveryType,
+                delivery_address: deliveryAddress || null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+            
+            if (error) {
+              console.error('Error creating group order in Supabase:', error)
+              // Fallback to localStorage
+              const groupOrderData = {
+                budget: individualBudget,
+                teamSize: teamSize,
+                deadline: orderDeadline,
+                venue: selectedVenue,
+                time: selectedTime,
+                deliveryType: deliveryType,
+                orders: [],
+                createdAt: new Date().toISOString()
+              }
+              localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
+            }
+          } catch (error) {
+            console.error('Error creating group order:', error)
+            // Fallback to localStorage
+            const groupOrderData = {
+              budget: individualBudget,
+              teamSize: teamSize,
+              deadline: orderDeadline,
+              venue: selectedVenue,
+              time: selectedTime,
+              deliveryType: deliveryType,
+              orders: [],
+              createdAt: new Date().toISOString()
+            }
+            localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
+          }
         }
-        localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
         
+        createGroupOrder()
         setOrderModalOpen(false)
         setShowGroupOrderDashboard(true)
       }
@@ -1594,6 +1926,12 @@ export default function YolkBusinessPortal() {
             <CardDescription className="text-gray-400 text-center">
               Share the link below with your team
             </CardDescription>
+            <div className="flex items-center justify-center space-x-2 mt-2">
+              <div className={`w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
+              <span className="text-xs text-gray-400">
+                {isRealtimeConnected ? 'Real-time connected' : 'Connecting...'}
+              </span>
+            </div>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -1759,7 +2097,6 @@ export default function YolkBusinessPortal() {
                 onClick={() => {
                   // Finalize the group order
                   setShowGroupOrderDashboard(false)
-                  setCurrentView("cart")
                   
                   // Add all group orders to cart
                   const allItems: CartItem[] = []
@@ -1784,10 +2121,11 @@ export default function YolkBusinessPortal() {
                     window.history.replaceState({}, '', url.toString())
                   }
                   
-                  // Reset group order mode
+                  // Reset group order mode and navigate to cart
                   setIsGroupOrderMode(false)
                   setGroupOrderId("")
                   setGroupOrderUrl("")
+                  setCurrentView("cart")
                 }}
                 disabled={groupOrders.length === 0}
                 className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
