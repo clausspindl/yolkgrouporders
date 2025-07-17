@@ -524,15 +524,15 @@ const GoogleMapComponent = ({
 
       {/* Selected Venue Info */}
       {selectedVenue && (
-        <div className="bg-[#ffffff]/10 border border-[#f8f68f]/10 rounded-lg p-4">
+        <div className="bg-[#000000]/10 border border-[#f8f68f]/10 rounded-lg p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
               <div>
-                <p className="text-white font-medium text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                <p className="text-black font-medium text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                   Selected: Yolk {venues.find(v => v.id === selectedVenue)?.name}
                 </p>
-                <p className="text-gray-400 text-sm">
+                <p className="text-zinc-600 text-sm">
                   {venues.find(v => v.id === selectedVenue)?.address}
                 </p>
               </div>
