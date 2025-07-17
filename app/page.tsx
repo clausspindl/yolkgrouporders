@@ -1757,82 +1757,166 @@ export default function YolkBusinessPortal() {
       
       <AnimatePresence mode="wait">
         {currentView === "hero" && (
-          <div className="min-h-screen bg-black flex items-center justify-center pt-[10rem]">
+          <div className="min-h-screen relative overflow-hidden">
+            {/* Hero Background Image */}
+            <div className="absolute inset-0">
+              <img 
+                src="/yolk-banner.jpg" 
+                alt="YOLK Restaurant" 
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/40"></div>
+            </div>
+
+            {/* Hero Content */}
+            <div className="relative z-10 min-h-screen flex items-center justify-center pt-[10rem]">
+              <div className="max-w-6xl mx-auto px-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                  
+                  {/* Left Side - Main Content */}
+                  <motion.div
+                    key="hero-content"
+                    initial={{ opacity: 0, x: -50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 50 }}
+                    transition={{ duration: 0.8 }}
+                    className="text-white space-y-8"
+                  >
+                    <div className="space-y-4">
+                      <Badge className="bg-[#f8f68f] text-black px-4 py-2 text-sm font-medium uppercase tracking-wider">
+                        Business Catering
+                      </Badge>
+                      <h1 className="text-5xl lg:text-7xl font-bold leading-tight" style={{ fontFamily: 'Hipnouma, serif' }}>
+                        Next-level
+                        <span className="block text-[#f8f68f]">sandwiches</span>
+                        for next-level teams
+                      </h1>
+                      <p className="text-xl text-gray-200 leading-relaxed max-w-lg">
+                        Because your office deserves better than bland. Premium catering with flexible invoicing and VIP service for verified business partners.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      <Button
+                        onClick={startOrderFlow}
+                        className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
+                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                      >
+                        Start Group Order
+                        <ArrowRight className="ml-2 h-6 w-6" />
+                      </Button>
+                      <Button
+                        onClick={() => setCurrentView("apply")}
+                        variant="outline"
+                        className="border-2 border-white text-white hover:bg-white hover:text-black px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase"
+                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                      >
+                        Become Partner
+                      </Button>
+                    </div>
+
+                    {/* Trust Indicators */}
+                    <div className="flex items-center space-x-8 pt-8">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
+                        <span className="text-white font-medium">Verified Partners</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-5 w-5 text-[#f8f68f]" />
+                        <span className="text-white font-medium">3+ Days Notice</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <CreditCard className="h-5 w-5 text-[#f8f68f]" />
+                        <span className="text-white font-medium">30-Day Terms</span>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Right Side - Features Grid */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 50 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -50 }}
+                    transition={{ delay: 0.3, duration: 0.8 }}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+                  >
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-[#f8f68f] p-3 rounded-full">
+                          <Users className="h-6 w-6 text-black" />
+                        </div>
+                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Group Orders
+                        </h3>
+                      </div>
+                      <p className="text-gray-200 text-sm leading-relaxed">
+                        Let each team member choose their own items or order for the whole team. Flexible ordering for any group size.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-[#f8f68f] p-3 rounded-full">
+                          <Building2 className="h-6 w-6 text-black" />
+                        </div>
+                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          London Wide
+                        </h3>
+                      </div>
+                      <p className="text-gray-200 text-sm leading-relaxed">
+                        Delivery & collection from 10+ locations across London. From Canary Wharf to Soho, we've got you covered.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-[#f8f68f] p-3 rounded-full">
+                          <Clock className="h-6 w-6 text-black" />
+                        </div>
+                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Premium Service
+                        </h3>
+                      </div>
+                      <p className="text-gray-200 text-sm leading-relaxed">
+                        Dedicated account managers, priority scheduling, and white-glove delivery service for business partners.
+                      </p>
+                    </div>
+
+                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="bg-[#f8f68f] p-3 rounded-full">
+                          <FileText className="h-6 w-6 text-black" />
+                        </div>
+                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Flexible Billing
+                        </h3>
+                      </div>
+                      <p className="text-gray-200 text-sm leading-relaxed">
+                        Pay now with card or apply for 30-day invoice terms. No prepayment needed - we trust our partners.
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+              </div>
+            </div>
+
+            {/* Scroll Indicator */}
             <motion.div
-              key="hero"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.8 }}
-              className="relative z-10 text-center max-w-4xl mx-auto px-6"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 1.2, duration: 0.8 }}
+              className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
             >
-              <motion.div
-                initial={{ y: 50, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.8 }}
-              >
-                <div className="relative inline-block">
-                  <img 
-                    src="/yolk-logo.svg" 
-                    alt="YOLK" 
-                    className="h-[250px] w-auto mb-6"
+              <div className="flex flex-col items-center space-y-2 text-white">
+                <span className="text-sm font-medium uppercase tracking-wider">Scroll to explore</span>
+                <div className="w-6 h-10 border-2 border-white rounded-full flex justify-center">
+                  <motion.div
+                    animate={{ y: [0, 12, 0] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                    className="w-1 h-3 bg-white rounded-full mt-2"
                   />
-                  <Badge className="absolute -top-8 -right-14 bg-zinc-900 text-white px-3 py-1 text-xs font-medium">
-                    BUSINESS
-                  </Badge>
                 </div>
-                <p className="text-gray-400 mb-12 max-w-2xl mx-auto leading-relaxed text-sm">
-                  Exclusive access for verified business partners. Place large group orders with flexible invoicing and
-                  premium service guaranteed.
-                </p>
-              </motion.div>
-
-              <motion.div
-                initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.6, duration: 0.8 }}
-                className="flex flex-col sm:flex-row gap-4 justify-center"
-              >
-                <Button
-                  onClick={() => setCurrentView("apply")}
-                  className="bg-[#3250B9] text-[#f8f68f] 
-                  px-5 py-6 text-xl font-medium rounded-full transition-all duration-300 uppercase shadow-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                >
-                  Become partner
-                </Button>
-                <Button
-                  onClick={startOrderFlow}
-                  variant="outline"
-                  className="bg-[#FF6400] text-[#f8f68f] hover:from-[#e6e346] hover:to-[#d4d123] hover:text-white px-5 py-6 text-xl font-medium rounded-full transition-all duration-300 uppercase shadow-lg border-0"
-                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                >
-                  ORDER NOW
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </motion.div>
-
-              <motion.div
-                initial={{ y: 30, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 1, duration: 0.8 }}
-                className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto"
-              >
-                <div className="text-center">
-                  <Calendar className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
-                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>PLAN AHEAD, TASTE AMAZING</h3>
-                  <p className="text-gray-400 text-sm">3+ days notice for next-level prep</p>
-                </div>
-                <div className="text-center">
-                  <Building2 className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
-                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>EXCLUSIVE ACCESS</h3>
-                  <p className="text-gray-400 text-sm">VIP treatment for verified partners</p>
-                </div>
-                <div className="text-center">
-                  <CheckCircle className="h-8 w-8 mx-auto mb-4 text-[#f8f68f]" />
-                  <h3 className="text-2xl font-medium mb-2 text-gray-100 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>PAY LATER, PARTY NOW</h3>
-                  <p className="text-gray-400 text-sm">No prepayment needed - we trust you</p>
-                </div>
-              </motion.div>
+              </div>
             </motion.div>
           </div>
         )}
