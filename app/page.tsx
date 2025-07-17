@@ -1783,10 +1783,10 @@ export default function YolkBusinessPortal() {
                     className="text-white space-y-8"
                   >
                     <div className="space-y-4">
-                      <Badge className="bg-[#f8f68f] text-black px-4 py-2 text-sm font-medium uppercase tracking-wider">
-                        Business Catering
+                      <Badge className="bg-[#000000] text-white px-4 py-2 text-sm font-medium uppercase tracking-wider">
+                        Business
                       </Badge>
-                      <h1 className="text-5xl lg:text-7xl font-bold leading-tight" style={{ fontFamily: 'Hipnouma, serif' }}>
+                      <h1 className="text-5xl lg:text-7xl font-bold leading-tight uppercase" style={{ fontFamily: 'alternate-gothic-atf, serif' }}>
                         Next-level
                         <span className="block text-[#f8f68f]">sandwiches</span>
                         for next-level teams
@@ -1796,15 +1796,19 @@ export default function YolkBusinessPortal() {
                       </p>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-4">
-                      <Button
-                        onClick={startOrderFlow}
-                        className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
-                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                      >
-                        Start Group Order
-                        <ArrowRight className="ml-2 h-6 w-6" />
-                      </Button>
+                                          <div className="flex flex-col sm:flex-row gap-4">
+                        <Button
+                          onClick={() => {
+                            document.getElementById('order-section')?.scrollIntoView({ 
+                              behavior: 'smooth' 
+                            })
+                          }}
+                          className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
+                          style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                        >
+                          Start Group Order
+                          <ArrowRight className="ml-2 h-6 w-6" />
+                        </Button>
                       <Button
                         onClick={() => setCurrentView("apply")}
                         variant="outline"
@@ -1920,6 +1924,160 @@ export default function YolkBusinessPortal() {
             </motion.div>
           </div>
         )}
+
+        {/* Order Section - Always visible */}
+        <section id="order-section" className="min-h-screen bg-black py-20">
+          <div className="max-w-6xl mx-auto px-6">
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+              viewport={{ once: true }}
+              className="text-center mb-16"
+            >
+              <Badge className="bg-[#f8f68f] text-black px-4 py-2 text-sm font-medium uppercase tracking-wider mb-6">
+                Get Started
+              </Badge>
+              <h2 className="text-4xl lg:text-6xl font-bold text-white mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                Ready to Order?
+              </h2>
+              <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+                Choose your delivery method, select your venue, and start building your perfect group order.
+              </p>
+            </motion.div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              {/* Left Side - Order Flow Steps */}
+              <motion.div
+                initial={{ opacity: 0, x: -50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                viewport={{ once: true }}
+                className="space-y-8"
+              >
+                <div className="space-y-6">
+                  <div className="flex items-start space-x-4">
+                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                      1
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Choose Delivery
+                      </h3>
+                      <p className="text-gray-300">
+                        Pick between delivered catering or click & collect from any of our London locations.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4">
+                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                      2
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Select Venue & Time
+                      </h3>
+                      <p className="text-gray-300">
+                        Choose your preferred location and schedule your order for 3+ days ahead.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4">
+                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Build Your Order
+                      </h3>
+                      <p className="text-gray-300">
+                        Browse our curated menu and add items to your cart. Standard orders or individual choice for teams.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-4">
+                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                      4
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        Checkout & Pay
+                      </h3>
+                      <p className="text-gray-300">
+                        Review your order, choose payment method, and confirm. We'll handle the rest!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Button
+                  onClick={startOrderFlow}
+                  className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105 w-full lg:w-auto"
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  Start Your Order
+                  <ArrowRight className="ml-2 h-6 w-6" />
+                </Button>
+              </motion.div>
+
+              {/* Right Side - Venue Preview */}
+              <motion.div
+                initial={{ opacity: 0, x: 50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, delay: 0.4 }}
+                viewport={{ once: true }}
+                className="space-y-6"
+              >
+                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
+                  <h3 className="text-2xl font-bold text-white mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                    Our Locations
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {venues.slice(0, 6).map((venue, index) => (
+                      <div key={venue.id} className="bg-black/30 border border-zinc-700 rounded-lg p-4">
+                        <h4 className="text-white font-bold mb-1 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          {venue.name}
+                        </h4>
+                        <p className="text-gray-400 text-sm">{venue.address}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-6 text-center">
+                    <p className="text-gray-300 text-sm">
+                      +{venues.length - 6} more locations across London
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-2xl p-6">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <Clock className="h-6 w-6 text-[#f8f68f]" />
+                    <h4 className="text-white font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      Order Timeline
+                    </h4>
+                  </div>
+                  <div className="space-y-3 text-sm text-gray-300">
+                    <div className="flex justify-between">
+                      <span>Minimum notice:</span>
+                      <span className="text-white font-medium">3 days</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Delivery hours:</span>
+                      <span className="text-white font-medium">9 AM - 8 PM</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Payment terms:</span>
+                      <span className="text-white font-medium">Card or 30-day invoice</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </section>
 
         {currentView === "apply" && (
           <div className="min-h-screen bg-black flex items-center justify-center pt-20">
