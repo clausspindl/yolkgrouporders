@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,292 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText, Users, Link, Clock } from "lucide-react"
+import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText, Users, Link, Clock, Search } from "lucide-react"
+
+// Google Maps types
+declare global {
+  interface Window {
+    google: any
+  }
+}
+
+interface GoogleMapProps {
+  venues: typeof venues
+  selectedVenue: string
+  onVenueSelect: (venueId: string) => void
+  deliveryAddress: string
+  onAddressChange: (address: string) => void
+  onAddressSelect: (address: string) => void
+  isGeocodingAddress: boolean
+}
+
+// Custom Map Component
+const GoogleMapComponent = ({ 
+  venues, 
+  selectedVenue, 
+  onVenueSelect, 
+  deliveryAddress, 
+  onAddressChange, 
+  onAddressSelect,
+  isGeocodingAddress 
+}: GoogleMapProps) => {
+  const mapRef = useRef<HTMLDivElement>(null)
+  const mapInstanceRef = useRef<any>(null)
+  const markersRef = useRef<any[]>([])
+  const autocompleteRef = useRef<any>(null)
+  const searchBoxRef = useRef<HTMLInputElement>(null)
+
+  // YOLK branded map styles
+  const mapStyles = [
+    {
+      "featureType": "all",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#1a1a1a" }]
+    },
+    {
+      "featureType": "all",
+      "elementType": "labels.text.stroke",
+      "stylers": [{ "color": "#1a1a1a" }]
+    },
+    {
+      "featureType": "all",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#ffffff" }]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "geometry.fill",
+      "stylers": [{ "color": "#000000" }]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "geometry.stroke",
+      "stylers": [{ "color": "#f8f68f" }]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#2a2a2a" }]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#2a2a2a" }]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#3a3a3a" }]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry.stroke",
+      "stylers": [{ "color": "#f8f68f" }]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.fill",
+      "stylers": [{ "color": "#ffffff" }]
+    },
+    {
+      "featureType": "transit",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#2a2a2a" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#1a1a1a" }]
+    }
+  ]
+
+  useEffect(() => {
+    // Load Google Maps API
+    const loadGoogleMaps = () => {
+      if (window.google && window.google.maps) {
+        initializeMap()
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&libraries=places`
+      script.async = true
+      script.defer = true
+      script.onload = initializeMap
+      document.head.appendChild(script)
+    }
+
+    const initializeMap = () => {
+      if (!mapRef.current || !window.google) return
+
+      // Create map instance
+      const map = new window.google.maps.Map(mapRef.current, {
+        center: { lat: 51.5074, lng: -0.1278 }, // London center
+        zoom: 12,
+        styles: mapStyles,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControl: true,
+        zoomControlOptions: {
+          position: window.google.maps.ControlPosition.RIGHT_BOTTOM
+        }
+      })
+
+      mapInstanceRef.current = map
+
+      // Create custom YOLK YES markers
+      venues.forEach((venue) => {
+        const marker = new window.google.maps.Marker({
+          position: { lat: venue.lat, lng: venue.lng },
+          map: map,
+          title: venue.name,
+          icon: {
+            url: '/yolk-yes.png',
+            scaledSize: new window.google.maps.Size(40, 40),
+            anchor: new window.google.maps.Point(20, 20)
+          },
+          animation: selectedVenue === venue.id ? window.google.maps.Animation.BOUNCE : null
+        })
+
+        // Add click listener
+        marker.addListener('click', () => {
+          onVenueSelect(venue.id)
+        })
+
+        // Add info window
+        const infoWindow = new window.google.maps.InfoWindow({
+          content: `
+            <div style="padding: 10px; max-width: 200px;">
+              <h3 style="margin: 0 0 5px 0; color: #f8f68f; font-weight: bold;">${venue.name}</h3>
+              <p style="margin: 0; color: #333; font-size: 12px;">${venue.address}</p>
+            </div>
+          `
+        })
+
+        marker.addListener('click', () => {
+          infoWindow.open(map, marker)
+        })
+
+        markersRef.current.push(marker)
+      })
+
+      // Initialize Places Autocomplete
+      if (searchBoxRef.current) {
+        autocompleteRef.current = new window.google.maps.places.Autocomplete(searchBoxRef.current, {
+          types: ['address'],
+          componentRestrictions: { country: 'GB' }
+        })
+
+        autocompleteRef.current.addListener('place_changed', () => {
+          const place = autocompleteRef.current.getPlace()
+          if (place.geometry) {
+            const lat = place.geometry.location.lat()
+            const lng = place.geometry.location.lng()
+            
+            // Find closest venue
+            let closestVenue = venues[0]
+            let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+            
+            venues.forEach(venue => {
+              const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+              if (distance < minDistance) {
+                minDistance = distance
+                closestVenue = venue
+              }
+            })
+
+            // Select closest venue
+            onVenueSelect(closestVenue.id)
+            
+            // Update address
+            onAddressSelect(place.formatted_address)
+            
+            // Pan map to selected venue
+            map.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+            map.setZoom(14)
+          }
+        })
+      }
+    }
+
+    loadGoogleMaps()
+
+    return () => {
+      // Cleanup markers
+      markersRef.current.forEach(marker => marker.setMap(null))
+      markersRef.current = []
+    }
+  }, [venues, selectedVenue, onVenueSelect, onAddressSelect])
+
+  // Update marker animations when selected venue changes
+  useEffect(() => {
+    markersRef.current.forEach((marker, index) => {
+      if (venues[index] && venues[index].id === selectedVenue) {
+        marker.setAnimation(window.google?.maps?.Animation?.BOUNCE)
+      } else {
+        marker.setAnimation(null)
+      }
+    })
+  }, [selectedVenue, venues])
+
+  return (
+    <div className="space-y-6">
+      {/* Address Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+        <Input
+          ref={searchBoxRef}
+          value={deliveryAddress}
+          onChange={(e) => onAddressChange(e.target.value)}
+          placeholder="Enter your delivery address..."
+          className="pl-10 bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
+          disabled={isGeocodingAddress}
+        />
+        {isGeocodingAddress && (
+          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#f8f68f]"></div>
+          </div>
+        )}
+      </div>
+
+      {/* Map Container */}
+      <div className="relative">
+        <div 
+          ref={mapRef} 
+          className="w-full h-[400px] rounded-2xl border border-zinc-700 overflow-hidden"
+        />
+        
+        {/* Map Overlay Info */}
+        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-sm border border-zinc-700 rounded-lg p-3">
+          <h4 className="text-white font-bold text-sm uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+            YOLK Locations
+          </h4>
+          <p className="text-gray-300 text-xs">
+            Click on YOLK YES pins to select venue
+          </p>
+        </div>
+      </div>
+
+      {/* Selected Venue Info */}
+      {selectedVenue && (
+        <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-4">
+          <div className="flex items-center space-x-3">
+            <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
+            <div>
+              <p className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                Selected: {venues.find(v => v.id === selectedVenue)?.name}
+              </p>
+              <p className="text-gray-400 text-sm">
+                {venues.find(v => v.id === selectedVenue)?.address}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // Spindl API interfaces
 interface SpindlPrice {
@@ -1293,38 +1578,22 @@ export default function YolkBusinessPortal() {
                     <MapPin className="inline h-5 w-5 mr-2" />
                     Delivery Address
                   </Label>
-                  <div className="flex gap-3">
-                    <Input
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      placeholder="Enter your delivery address..."
-                      className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500 flex-1"
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddressSubmit()}
-                    />
-                    <Button
-                      onClick={handleAddressSubmit}
-                      disabled={!deliveryAddress.trim() || isGeocodingAddress}
-                      className="bg-[#f8f68f] text-black hover:bg-[#e6e346]"
-                    >
-                      {isGeocodingAddress ? "Finding..." : "Find YOLK"}
-                    </Button>
-                  </div>
                   
-                  {suggestedVenue && (
-                    <Card className="bg-[#f8f68f]/10 border-[#f8f68f]/30">
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-3">
-                          <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
-                          <div>
-                            <p className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                              Closest YOLK: {suggestedVenue.name}
-                            </p>
-                            <p className="text-gray-400 text-sm">{suggestedVenue.address}</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
+                  <GoogleMapComponent
+                    venues={venues}
+                    selectedVenue={selectedVenue}
+                    onVenueSelect={(venueId) => {
+                      setSelectedVenue(venueId)
+                      setSuggestedVenue(venues.find(v => v.id === venueId) || null)
+                    }}
+                    deliveryAddress={deliveryAddress}
+                    onAddressChange={setDeliveryAddress}
+                    onAddressSelect={(address) => {
+                      setDeliveryAddress(address)
+                      // Auto-select closest venue logic is handled in the map component
+                    }}
+                    isGeocodingAddress={isGeocodingAddress}
+                  />
                 </div>
               </motion.div>
             )}
@@ -2023,7 +2292,7 @@ export default function YolkBusinessPortal() {
                 </Button>
               </motion.div>
 
-              {/* Right Side - Venue Preview */}
+              {/* Right Side - Interactive Map */}
               <motion.div
                 initial={{ opacity: 0, x: 50 }}
                 whileInView={{ opacity: 1, x: 0 }}
@@ -2033,23 +2302,21 @@ export default function YolkBusinessPortal() {
               >
                 <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
                   <h3 className="text-2xl font-bold text-white mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    Our Locations
+                    Find Your YOLK
                   </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {venues.slice(0, 6).map((venue, index) => (
-                      <div key={venue.id} className="bg-black/30 border border-zinc-700 rounded-lg p-4">
-                        <h4 className="text-white font-bold mb-1 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          {venue.name}
-                        </h4>
-                        <p className="text-gray-400 text-sm">{venue.address}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-6 text-center">
-                    <p className="text-gray-300 text-sm">
-                      +{venues.length - 6} more locations across London
-                    </p>
-                  </div>
+                  
+                  <GoogleMapComponent
+                    venues={venues}
+                    selectedVenue={selectedVenue}
+                    onVenueSelect={setSelectedVenue}
+                    deliveryAddress={deliveryAddress}
+                    onAddressChange={setDeliveryAddress}
+                    onAddressSelect={(address) => {
+                      setDeliveryAddress(address)
+                      // Auto-select closest venue logic is handled in the map component
+                    }}
+                    isGeocodingAddress={isGeocodingAddress}
+                  />
                 </div>
 
                 <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-2xl p-6">
