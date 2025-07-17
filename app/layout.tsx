@@ -3,7 +3,7 @@ import './globals.css'
 import { AuthProvider } from './context/AuthContext'
 
 export const metadata: Metadata = {
-  title: 'YOLK Business Portal',
+  title: 'YOLK',
   description: 'Next-level sandwiches for next-level teams',
   generator: 'v0.dev',
 }

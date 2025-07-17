@@ -302,7 +302,7 @@ export default function AccountPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <Card className="bg-zinc-800/50 border-zinc-200">
+              <Card className="bg-zinc-100/50 border-zinc-200">
                 <CardHeader>
                   <div className="flex items-center space-x-3">
                     <Mail className="h-6 w-6 text-black" />
