@@ -45,73 +45,77 @@ const GoogleMapComponent = ({
   const autocompleteRef = useRef<any>(null)
   const searchBoxRef = useRef<HTMLInputElement>(null)
 
-  // YOLK branded map styles
+  // Light mode map styles
   const mapStyles = [
     {
       "featureType": "all",
       "elementType": "geometry",
-      "stylers": [{ "color": "#1a1a1a" }]
+      "stylers": [{ "color": "#f5f5f5" }]
     },
     {
       "featureType": "all",
       "elementType": "labels.text.stroke",
-      "stylers": [{ "color": "#1a1a1a" }]
+      "stylers": [{ "color": "#ffffff" }]
     },
     {
       "featureType": "all",
       "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#ffffff" }]
+      "stylers": [{ "color": "#333333" }]
     },
     {
       "featureType": "administrative",
       "elementType": "geometry.fill",
-      "stylers": [{ "color": "#000000" }]
+      "stylers": [{ "color": "#ffffff" }]
     },
     {
       "featureType": "administrative",
       "elementType": "geometry.stroke",
-      "stylers": [{ "color": "#f8f68f" }]
+      "stylers": [{ "color": "#cccccc" }]
     },
     {
       "featureType": "landscape",
       "elementType": "geometry",
-      "stylers": [{ "color": "#2a2a2a" }]
+      "stylers": [{ "color": "#f8f8f8" }]
     },
     {
       "featureType": "poi",
       "elementType": "geometry",
-      "stylers": [{ "color": "#2a2a2a" }]
+      "stylers": [{ "color": "#e8e8e8" }]
     },
     {
       "featureType": "road",
       "elementType": "geometry",
-      "stylers": [{ "color": "#3a3a3a" }]
+      "stylers": [{ "color": "#ffffff" }]
     },
     {
       "featureType": "road",
       "elementType": "geometry.stroke",
-      "stylers": [{ "color": "#f8f68f" }]
+      "stylers": [{ "color": "#cccccc" }]
     },
     {
       "featureType": "road",
       "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#ffffff" }]
+      "stylers": [{ "color": "#333333" }]
     },
     {
       "featureType": "transit",
       "elementType": "geometry",
-      "stylers": [{ "color": "#2a2a2a" }]
+      "stylers": [{ "color": "#e8e8e8" }]
     },
     {
       "featureType": "water",
       "elementType": "geometry",
-      "stylers": [{ "color": "#1a1a1a" }]
+      "stylers": [{ "color": "#e6f3ff" }]
     }
   ]
 
   useEffect(() => {
     // Load Google Maps API only once
     const loadGoogleMaps = () => {
+      // Debug: Log the API key (first few characters only for security)
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'DEMO_KEY'
+      console.log('Google Maps API Key loaded:', apiKey.substring(0, 10) + '...')
+      
       if (window.google && window.google.maps) {
         initializeMap()
         return
@@ -130,7 +134,7 @@ const GoogleMapComponent = ({
       }
 
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'DEMO_KEY'}&libraries=places`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`
       script.async = true
       script.defer = true
       script.onload = initializeMap
@@ -224,16 +228,22 @@ const GoogleMapComponent = ({
 
         // Initialize Places Autocomplete
         if (searchBoxRef.current) {
+          console.log('Initializing Places Autocomplete...')
           autocompleteRef.current = new window.google.maps.places.Autocomplete(searchBoxRef.current, {
             types: ['address'],
             componentRestrictions: { country: 'GB' }
           })
 
           autocompleteRef.current.addListener('place_changed', () => {
+            console.log('Place changed event triggered')
             const place = autocompleteRef.current.getPlace()
-            if (place.geometry) {
+            console.log('Selected place:', place)
+            
+            // Check if place has valid data
+            if (place && place.geometry && place.geometry.location) {
               const lat = place.geometry.location.lat()
               const lng = place.geometry.location.lng()
+              console.log('Place coordinates:', lat, lng)
               
               // Find closest venue
               let closestVenue = venues[0]
@@ -241,23 +251,78 @@ const GoogleMapComponent = ({
               
               venues.forEach((venue: any) => {
                 const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+                console.log(`Distance to ${venue.name}: ${distance.toFixed(1)}km`)
                 if (distance < minDistance) {
                   minDistance = distance
                   closestVenue = venue
                 }
               })
 
+              console.log(`Closest venue: ${closestVenue.name} (${minDistance.toFixed(1)}km away)`)
+
               // Select closest venue
               onVenueSelect(closestVenue.id)
               
               // Update address
-              onAddressSelect(place.formatted_address)
+              onAddressSelect(place.formatted_address || place.name || deliveryAddress)
               
               // Pan map to selected venue
-              map.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
-              map.setZoom(14)
+              if (mapInstanceRef.current) {
+                mapInstanceRef.current.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+                mapInstanceRef.current.setZoom(14)
+              }
+              
+              // Show success message
+              console.log(`Auto-selected nearest YOLK: ${closestVenue.name} (${minDistance.toFixed(1)}km away)`)
+            } else {
+              console.log('No valid geometry found for selected place, trying manual geocoding...')
+              // Fallback to manual geocoding
+              if (place && (place.formatted_address || place.name)) {
+                const addressToGeocode = place.formatted_address || place.name
+                console.log('Attempting to geocode:', addressToGeocode)
+                
+                // Use the manual geocoding logic
+                const geocoder = new window.google.maps.Geocoder()
+                geocoder.geocode({ 
+                  address: addressToGeocode,
+                  componentRestrictions: { country: 'GB' }
+                }, (results: any, status: any) => {
+                  console.log('Fallback geocoding results:', results, 'Status:', status)
+                  
+                  if (status === 'OK' && results && results[0]) {
+                    const location = results[0].geometry.location
+                    const lat = location.lat()
+                    const lng = location.lng()
+                    
+                    // Find closest venue
+                    let closestVenue = venues[0]
+                    let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+                    
+                    venues.forEach((venue: any) => {
+                      const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+                      if (distance < minDistance) {
+                        minDistance = distance
+                        closestVenue = venue
+                      }
+                    })
+                    
+                    // Select closest venue
+                    onVenueSelect(closestVenue.id)
+                    
+                    // Pan map to selected venue
+                    if (mapInstanceRef.current) {
+                      mapInstanceRef.current.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+                      mapInstanceRef.current.setZoom(14)
+                    }
+                  }
+                })
+              }
             }
           })
+          
+          console.log('Places Autocomplete initialized successfully')
+        } else {
+          console.log('Search box ref not available')
         }
       } catch (error) {
         console.error('Error initializing Google Maps:', error)
@@ -310,28 +375,140 @@ const GoogleMapComponent = ({
   return (
     <div className="space-y-6">
       {/* Address Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-        <Input
-          ref={searchBoxRef}
-          value={deliveryAddress}
-          onChange={(e) => onAddressChange(e.target.value)}
-          placeholder="Enter your delivery address..."
-          className="pl-10 bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
-          disabled={isGeocodingAddress}
-        />
-        {isGeocodingAddress && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#f8f68f]"></div>
-          </div>
-        )}
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Input
+            ref={searchBoxRef}
+            value={deliveryAddress}
+            onChange={(e) => onAddressChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && deliveryAddress.trim()) {
+                e.preventDefault()
+                // Trigger the same logic as the button
+                const geocoder = new window.google.maps.Geocoder()
+                geocoder.geocode({ 
+                  address: deliveryAddress,
+                  componentRestrictions: { country: 'GB' }
+                }, (results: any, status: any) => {
+                  console.log('Enter key geocoding results:', results, 'Status:', status)
+                  
+                  if (status === 'OK' && results && results[0]) {
+                    const location = results[0].geometry.location
+                    const lat = location.lat()
+                    const lng = location.lng()
+                    
+                    console.log('Enter key geocoded coordinates:', lat, lng)
+                    
+                    // Find closest venue
+                    let closestVenue = venues[0]
+                    let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+                    
+                    venues.forEach((venue: any) => {
+                      const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+                      console.log(`Distance to ${venue.name}: ${distance.toFixed(1)}km`)
+                      if (distance < minDistance) {
+                        minDistance = distance
+                        closestVenue = venue
+                      }
+                    })
+                    
+                    console.log(`Closest venue: ${closestVenue.name} (${minDistance.toFixed(1)}km away)`)
+                    
+                    // Select closest venue
+                    onVenueSelect(closestVenue.id)
+                    
+                    // Pan map to selected venue
+                    if (mapInstanceRef.current) {
+                      mapInstanceRef.current.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+                      mapInstanceRef.current.setZoom(14)
+                    }
+                  } else {
+                    console.error('Enter key geocoding failed:', status, results)
+                  }
+                })
+              }
+            }}
+            placeholder="Enter your delivery address..."
+            className="h-14 pl-10 bg-white/50 border-zinc-200 text-white placeholder:text-gray-500"
+            disabled={isGeocodingAddress}
+          />
+          {isGeocodingAddress && (
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#f8f68f]"></div>
+            </div>
+          )}
+        </div>
+        
+        {/* Manual submit button as fallback */}
+        <Button
+          onClick={async () => {
+            if (!deliveryAddress.trim()) return
+            
+            console.log('Manual address submission:', deliveryAddress)
+            
+            try {
+              // Use Google Geocoding API to get coordinates
+              const geocoder = new window.google.maps.Geocoder()
+              geocoder.geocode({ 
+                address: deliveryAddress,
+                componentRestrictions: { country: 'GB' }
+              }, (results: any, status: any) => {
+                console.log('Geocoding results:', results, 'Status:', status)
+                
+                if (status === 'OK' && results && results[0]) {
+                  const location = results[0].geometry.location
+                  const lat = location.lat()
+                  const lng = location.lng()
+                  
+                  console.log('Geocoded coordinates:', lat, lng)
+                  
+                  // Find closest venue
+                  let closestVenue = venues[0]
+                  let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+                  
+                  venues.forEach((venue: any) => {
+                    const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+                    console.log(`Distance to ${venue.name}: ${distance.toFixed(1)}km`)
+                    if (distance < minDistance) {
+                      minDistance = distance
+                      closestVenue = venue
+                    }
+                  })
+                  
+                  console.log(`Closest venue: ${closestVenue.name} (${minDistance.toFixed(1)}km away)`)
+                  
+                  // Select closest venue
+                  onVenueSelect(closestVenue.id)
+                  
+                  // Pan map to selected venue
+                  if (mapInstanceRef.current) {
+                    mapInstanceRef.current.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+                    mapInstanceRef.current.setZoom(14)
+                  }
+                } else {
+                  console.error('Geocoding failed:', status, results)
+                  alert('Could not find that address. Please try a more specific address.')
+                }
+              })
+            } catch (error) {
+              console.error('Error geocoding address:', error)
+              alert('Error processing address. Please try again.')
+            }
+          }}
+          disabled={!deliveryAddress.trim()}
+          className="h-14 w-full bg-[#f8f68f] text-black hover:bg-[#fffeee] uppercase text-lg"
+          style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+        >
+          Search
+        </Button>
       </div>
 
       {/* Map Container */}
       <div className="relative">
         <div 
           ref={mapRef} 
-          className="w-full h-[400px] rounded-2xl border border-zinc-700 overflow-hidden"
+          className="w-full h-[400px] rounded-2xl border border-zinc-200 overflow-hidden"
         />
         
         {/* Map Overlay Info */}
@@ -347,17 +524,27 @@ const GoogleMapComponent = ({
 
       {/* Selected Venue Info */}
       {selectedVenue && (
-        <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-4">
-          <div className="flex items-center space-x-3">
-            <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
-            <div>
-              <p className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                Selected: {venues.find(v => v.id === selectedVenue)?.name}
-              </p>
-              <p className="text-gray-400 text-sm">
-                {venues.find(v => v.id === selectedVenue)?.address}
-              </p>
+        <div className="bg-[#ffffff]/10 border border-[#f8f68f]/10 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
+              <div>
+                <p className="text-white font-medium text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  Selected: Yolk {venues.find(v => v.id === selectedVenue)?.name}
+                </p>
+                <p className="text-gray-400 text-sm">
+                  {venues.find(v => v.id === selectedVenue)?.address}
+                </p>
+              </div>
             </div>
+            <Button
+              onClick={() => onVenueSelect("")}
+              variant="ghost"
+              size="sm"
+              className="text-gray-400 hover:text-white hover:bg-white/10 rounded-full w-8 h-8 p-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       )}
@@ -1662,6 +1849,18 @@ export default function YolkBusinessPortal() {
                     }}
                     isGeocodingAddress={isGeocodingAddress}
                   />
+                  
+                  {/* Auto-selection info */}
+                  {suggestedVenue && (
+                    <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-3">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="h-4 w-4 text-[#f8f68f]" />
+                        <span className="text-white text-sm">
+                          Auto-selected nearest YOLK: <strong>{suggestedVenue.name}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -2005,9 +2204,9 @@ export default function YolkBusinessPortal() {
               {/* YOLK Brand */}
               <div className="flex items-center">
                 <img 
-                  src="/yolk-icon.svg" 
+                  src="/yolk-black.svg" 
                   alt="YOLK" 
-                  className="h-14 w-auto cursor-pointer hover:opacity-80 transition-opacity"
+                  className="h-8 w-auto cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={() => setCurrentView("hero")}
                 />
               </div>
@@ -2098,7 +2297,7 @@ export default function YolkBusinessPortal() {
             {/* Hero Background Image */}
             <div className="absolute inset-0">
               <img 
-                src="/yolk-banner.jpg" 
+                src="/yolk-banner.png" 
                 alt="YOLK Restaurant" 
                 className="w-full h-full object-cover"
               />
@@ -2107,7 +2306,7 @@ export default function YolkBusinessPortal() {
 
             {/* Hero Content */}
             <div className="relative z-10 min-h-screen flex items-center justify-center pt-[10rem]">
-              <div className="max-w-6xl mx-auto px-6">
+              <div className="max-w-7xl mx-auto px-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                   
                   {/* Left Side - Main Content */}
@@ -2128,7 +2327,7 @@ export default function YolkBusinessPortal() {
                         <span className="block text-[#f8f68f]">sandwiches</span>
                         for next-level teams
                       </h1>
-                      <p className="text-xl text-gray-200 leading-relaxed max-w-lg">
+                      <p className="text-xl text-zinc-200 leading-relaxed max-w-lg">
                         Because your office deserves better than bland. Premium catering with flexible invoicing and VIP service for verified business partners.
                       </p>
                     </div>
@@ -2140,7 +2339,7 @@ export default function YolkBusinessPortal() {
                               behavior: 'smooth' 
                             })
                           }}
-                          className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
+                          className="bg-[#f8f68f] text-black hover:bg-[#f8ffff] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
                           style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                         >
                           Start Group Order
@@ -2149,7 +2348,7 @@ export default function YolkBusinessPortal() {
                       <Button
                         onClick={() => setCurrentView("apply")}
                         variant="outline"
-                        className="border-2 border-white text-white hover:bg-white hover:text-black px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase"
+                        className="text-white hover:bg-zinc-700 hover:text-white px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase"
                         style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                       >
                         Become Partner
@@ -2205,7 +2404,7 @@ export default function YolkBusinessPortal() {
                         </h3>
                       </div>
                       <p className="text-gray-200 text-sm leading-relaxed">
-                        Delivery & collection from 10+ locations across London. From Canary Wharf to Soho, we've got you covered.
+                        Delivery & collection from 10 locations across London. From Canary Wharf to Soho, we've got you covered.
                       </p>
                     </div>
 
@@ -2242,13 +2441,13 @@ export default function YolkBusinessPortal() {
             </div>
 
             {/* Scroll Indicator */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.2, duration: 0.8 }}
-              className="absolute bottom-8 left-1/2 transform -translate-x-1/2"
-            >
-              <div className="flex flex-col items-center space-y-2 text-white">
+            <div className="absolute bottom-8 left-0 right-0 flex justify-center">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.2, duration: 0.8 }}
+                className="flex flex-col items-center space-y-2 text-white"
+              >
                 <span className="text-sm font-medium uppercase tracking-wider">Scroll to explore</span>
                 <div className="w-6 h-10 border-2 border-white rounded-full flex justify-center">
                   <motion.div
@@ -2257,13 +2456,13 @@ export default function YolkBusinessPortal() {
                     className="w-1 h-3 bg-white rounded-full mt-2"
                   />
                 </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           </div>
         )}
 
         {/* Order Section - Always visible */}
-        <section id="order-section" className="min-h-screen bg-black py-20">
+        <section id="order-section" className="min-h-screen bg-white py-20">
           <div className="max-w-6xl mx-auto px-6">
             <motion.div
               initial={{ opacity: 0, y: 50 }}
@@ -2275,140 +2474,139 @@ export default function YolkBusinessPortal() {
               <Badge className="bg-[#f8f68f] text-black px-4 py-2 text-sm font-medium uppercase tracking-wider mb-6">
                 Get Started
               </Badge>
-              <h2 className="text-4xl lg:text-6xl font-bold text-white mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+              <h2 className="text-4xl lg:text-6xl font-bold text-black mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                 Ready to Order?
               </h2>
-              <p className="text-xl text-gray-300 max-w-2xl mx-auto">
+              <p className="text-xl text-zinc-700 max-w-2xl mx-auto">
                 Choose your delivery method, select your venue, and start building your perfect group order.
               </p>
             </motion.div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-              {/* Left Side - Order Flow Steps */}
+            {/* Find Your YOLK - Full Width Above */}
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              viewport={{ once: true }}
+              className="mb-12"
+            >
+              <div className="bg-zinc-100/50 border border-zinc-100 rounded-2xl p-8">
+                <h3 className="text-2xl font-bold text-black mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  Find nearest YOLK
+                </h3>
+                <GoogleMapComponent
+                  venues={venues}
+                  selectedVenue={selectedVenue}
+                  onVenueSelect={setSelectedVenue}
+                  deliveryAddress={deliveryAddress}
+                  onAddressChange={setDeliveryAddress}
+                  onAddressSelect={(address) => {
+                    setDeliveryAddress(address)
+                    // Auto-select closest venue logic is handled in the map component
+                  }}
+                  isGeocodingAddress={isGeocodingAddress}
+                />
+              </div>
+            </motion.div>
+
+            {/* Order Steps - Split into Two Columns */}
+            <div className="space-y-8 pt-12">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+                {/* Left Column - Steps 1-2 */}
+                <motion.div
+                  initial={{ opacity: 0, x: -50 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.8, delay: 0.4 }}
+                  viewport={{ once: true }}
+                  className="space-y-6"
+                >
+                  <div className="space-y-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                        1
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-black mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Choose Delivery
+                        </h3>
+                        <p className="text-zinc-600">
+                          Pick between delivered catering or click & collect from any of our London locations.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                        2
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-black mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Select Venue & Time
+                        </h3>
+                        <p className="text-zinc-600">
+                          Choose your preferred location and schedule your order for 3+ days ahead.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Right Column - Steps 3-4 */}
+                <motion.div
+                  initial={{ opacity: 0, x: 50 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.8, delay: 0.6 }}
+                  viewport={{ once: true }}
+                  className="space-y-6"
+                >
+                  <div className="space-y-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                        3
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-black mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Build Your Order
+                        </h3>
+                        <p className="text-zinc-600">
+                          Browse our curated menu and add items to your cart. Standard orders or individual choice for teams.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start space-x-4">
+                      <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
+                        4
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-bold text-black mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Checkout & Pay
+                        </h3>
+                        <p className="text-zinc-600">
+                          Review your order, choose payment method, and confirm. We'll handle the rest!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+
+              {/* Start Your Order Button - Centered on Separate Row */}
               <motion.div
-                initial={{ opacity: 0, x: -50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.8 }}
                 viewport={{ once: true }}
-                className="space-y-8"
+                className="flex justify-center"
               >
-                <div className="space-y-6">
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
-                      1
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Choose Delivery
-                      </h3>
-                      <p className="text-gray-300">
-                        Pick between delivered catering or click & collect from any of our London locations.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
-                      2
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Select Venue & Time
-                      </h3>
-                      <p className="text-gray-300">
-                        Choose your preferred location and schedule your order for 3+ days ahead.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
-                      3
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Build Your Order
-                      </h3>
-                      <p className="text-gray-300">
-                        Browse our curated menu and add items to your cart. Standard orders or individual choice for teams.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start space-x-4">
-                    <div className="bg-[#f8f68f] text-black w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl flex-shrink-0">
-                      4
-                    </div>
-                    <div>
-                      <h3 className="text-2xl font-bold text-white mb-2 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Checkout & Pay
-                      </h3>
-                      <p className="text-gray-300">
-                        Review your order, choose payment method, and confirm. We'll handle the rest!
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
                 <Button
                   onClick={startOrderFlow}
-                  className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105 w-full lg:w-auto"
+                  className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
                   Start Your Order
                   <ArrowRight className="ml-2 h-6 w-6" />
                 </Button>
-              </motion.div>
-
-              {/* Right Side - Interactive Map */}
-              <motion.div
-                initial={{ opacity: 0, x: 50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.8, delay: 0.4 }}
-                viewport={{ once: true }}
-                className="space-y-6"
-              >
-                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-8">
-                  <h3 className="text-2xl font-bold text-white mb-6 uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    Find Your YOLK
-                  </h3>
-                  
-                  <GoogleMapComponent
-                    venues={venues}
-                    selectedVenue={selectedVenue}
-                    onVenueSelect={setSelectedVenue}
-                    deliveryAddress={deliveryAddress}
-                    onAddressChange={setDeliveryAddress}
-                    onAddressSelect={(address) => {
-                      setDeliveryAddress(address)
-                      // Auto-select closest venue logic is handled in the map component
-                    }}
-                    isGeocodingAddress={isGeocodingAddress}
-                  />
-                </div>
-
-                <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-2xl p-6">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <Clock className="h-6 w-6 text-[#f8f68f]" />
-                    <h4 className="text-white font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                      Order Timeline
-                    </h4>
-                  </div>
-                  <div className="space-y-3 text-sm text-gray-300">
-                    <div className="flex justify-between">
-                      <span>Minimum notice:</span>
-                      <span className="text-white font-medium">3 days</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Delivery hours:</span>
-                      <span className="text-white font-medium">9 AM - 8 PM</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Payment terms:</span>
-                      <span className="text-white font-medium">Card or 30-day invoice</span>
-                    </div>
-                  </div>
-                </div>
               </motion.div>
             </div>
           </div>
