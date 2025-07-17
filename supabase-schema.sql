@@ -1,6 +1,3 @@
--- Enable Row Level Security
-ALTER DATABASE postgres SET "app.jwt_secret" TO 'your-jwt-secret';
-
 -- Create group_orders table
 CREATE TABLE IF NOT EXISTS group_orders (
   id TEXT PRIMARY KEY,

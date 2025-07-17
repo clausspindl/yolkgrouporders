@@ -198,8 +198,8 @@ const GoogleMapComponent = ({
             map: map,
             title: venue.name,
             icon: {
-              url: '/yolk-yes.png',
-              scaledSize: new window.google.maps.Size(40, 40),
+              url: '/yolk-pin.png',
+              scaledSize: new window.google.maps.Size(40, 60),
               anchor: new window.google.maps.Point(20, 20)
             },
             animation: selectedVenue === venue.id ? window.google.maps.Animation.BOUNCE : null

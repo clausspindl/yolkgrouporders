@@ -28,7 +28,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 1. Go to your Supabase dashboard
 2. Navigate to the SQL Editor
 3. Copy and paste the contents of `supabase-schema.sql`
-4. Run the SQL commands
+4. Run the SQL commands (this will create the tables and enable real-time)
 
 ### 4. Enable Real-time
 
@@ -107,6 +107,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 - Public read/write access for demo purposes
 - In production, implement proper authentication
 - Consider adding user authentication and authorization
+- JWT secret is automatically managed by Supabase
 
 ## Production Considerations
 
