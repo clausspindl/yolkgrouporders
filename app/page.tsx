@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Building2, ArrowRight, Plus, Minus, ShoppingCart, CheckCircle, X, MapPin, Truck, CreditCard, FileText, Users, Link, Clock, Search } from "lucide-react"
-import { supabase, type RealtimeGroupOrder, type RealtimeGroupOrderItem } from "@/lib/supabase"
+import { supabase, type RealtimeGroupOrder, type RealtimeGroupOrderItem, signOut } from "@/lib/supabase"
+import { useAuth } from "./context/AuthContext"
+import GroupOrderDashboardModal from "./components/GroupOrderDashboardModal"
 
 // Google Maps types
 declare global {
@@ -870,6 +872,7 @@ const geocodeAddress = async (address: string): Promise<{lat: number, lng: numbe
 
 
 export default function YolkBusinessPortal() {
+  const { user, loading, isManager } = useAuth()
   const [currentView, setCurrentView] = useState("hero")
   const [cart, setCart] = useState<CartItem[]>([])
   const [orderDate, setOrderDate] = useState("")
@@ -916,6 +919,7 @@ export default function YolkBusinessPortal() {
   const [groupOrderId, setGroupOrderId] = useState("")
   const [groupOrderUrl, setGroupOrderUrl] = useState("")
   const [showGroupOrderDashboard, setShowGroupOrderDashboard] = useState(false)
+  const [currentGroupOrder, setCurrentGroupOrder] = useState<RealtimeGroupOrder | null>(null)
   const [groupOrders, setGroupOrders] = useState<Array<{
     id: string
     personName: string
@@ -926,6 +930,7 @@ export default function YolkBusinessPortal() {
   const [isGroupOrderMode, setIsGroupOrderMode] = useState(false)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
   const [groupOrderNotFound, setGroupOrderNotFound] = useState(false)
+  const [isTeamMemberMode, setIsTeamMemberMode] = useState(false)
 
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
@@ -963,8 +968,29 @@ export default function YolkBusinessPortal() {
 
   // Handle group order URL parameters and real-time subscriptions
   useEffect(() => {
+    // Test Supabase connection
+    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log('Supabase Key (first 10 chars):', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 10))
+    
+    // Test Supabase connection
+    const testConnection = async () => {
+      try {
+        const { data, error } = await supabase.from('group_orders').select('count').limit(1)
+        if (error) {
+          console.error('Supabase connection test failed:', error)
+        } else {
+          console.log('Supabase connection test successful')
+        }
+      } catch (err) {
+        console.error('Supabase connection test error:', err)
+      }
+    }
+    
+    testConnection()
+    
     const urlParams = new URLSearchParams(window.location.search)
     const groupOrderId = urlParams.get('group-order')
+    const isManagerView = urlParams.get('manager') === 'true'
     
     if (groupOrderId) {
       console.log('Group order ID detected in URL:', groupOrderId)
@@ -980,21 +1006,28 @@ export default function YolkBusinessPortal() {
             const parsedData = JSON.parse(existingGroupOrder)
             
             // Set all the group order data
-            setGroupOrderId(groupOrderId)
-            setGroupOrderUrl(window.location.href)
+          setGroupOrderId(groupOrderId)
+          setGroupOrderUrl(window.location.href)
             setIndividualBudget(parsedData.budget?.toString() || "25")
             setTeamSize(parsedData.teamSize?.toString() || "10")
             setOrderDeadline(parsedData.deadline || "2 days before pickup")
             setGroupOrders(parsedData.orders || [])
             setSelectedVenue(parsedData.venue || "")
             setSelectedTime(parsedData.time || "")
-            setDeliveryType(parsedData.deliveryType || "collection")
-            setDeliveryAddress(parsedData.deliveryAddress || "")
-            setIsGroupOrderMode(true)
-            setCurrentView("menu")
-            
-            console.log('Group order loaded from localStorage, navigating to menu')
-            return
+                      setDeliveryType(parsedData.deliveryType || "collection")
+          setDeliveryAddress(parsedData.deliveryAddress || "")
+          setIsGroupOrderMode(true)
+          setIsTeamMemberMode(!isManagerView)
+          
+          if (isManagerView) {
+            // For manager view, open the group order dashboard
+            setShowGroupOrderDashboard(true)
+          }
+          // Don't navigate to menu immediately - let them see the hero first
+          // setCurrentView("menu")
+          
+          console.log('Group order loaded from localStorage, staying on hero')
+          return
           }
 
           // If no localStorage data, try Supabase
@@ -1017,6 +1050,7 @@ export default function YolkBusinessPortal() {
           console.log('Group order data from Supabase:', groupOrderData)
           setGroupOrderId(groupOrderId)
           setGroupOrderUrl(window.location.href)
+          setCurrentGroupOrder(groupOrderData)
           setIndividualBudget(groupOrderData.budget?.toString() || "25")
           setTeamSize(groupOrderData.team_size?.toString() || "10")
           setOrderDeadline(groupOrderData.deadline || "2 days before pickup")
@@ -1025,9 +1059,16 @@ export default function YolkBusinessPortal() {
           setDeliveryType(groupOrderData.delivery_type || "collection")
           setDeliveryAddress(groupOrderData.delivery_address || "")
           setIsGroupOrderMode(true)
-          setCurrentView("menu")
+          setIsTeamMemberMode(!isManagerView)
           
-          console.log('Group order loaded from Supabase, navigating to menu')
+          if (isManagerView) {
+            // For manager view, open the group order dashboard
+            setShowGroupOrderDashboard(true)
+          }
+          // Don't navigate to menu immediately - let them see the hero first
+          // setCurrentView("menu")
+          
+          console.log('Group order loaded from Supabase, staying on hero')
 
           // Fetch group order items
           const { data: itemsData, error: itemsError } = await supabase
@@ -1046,6 +1087,8 @@ export default function YolkBusinessPortal() {
           setGroupOrders(transformedOrders)
 
           // Set up real-time subscription for group order items
+          console.log('Setting up real-time subscription for group order:', groupOrderId)
+          
           const subscription = supabase
             .channel(`group-order-${groupOrderId}`)
             .on(
@@ -1057,126 +1100,69 @@ export default function YolkBusinessPortal() {
                 filter: `group_order_id=eq.${groupOrderId}`
               },
               (payload) => {
-                setIsRealtimeConnected(true)
                 console.log('Real-time update received:', payload)
+                setIsRealtimeConnected(true)
                 
-                if (payload.eventType === 'INSERT') {
-                  // New item added
-                  const newItem = payload.new as RealtimeGroupOrderItem
-                  setGroupOrders(prev => {
-                    // Check if person already has an order
-                    const existingPersonOrder = prev.find(order => order.personName === newItem.person_name)
-                    
-                    if (existingPersonOrder) {
-                      // Update existing person's order
-                      const updatedOrders = prev.map(order => {
-                        if (order.personName === newItem.person_name) {
-                          const newCartItem = {
-                            id: newItem.product_id,
-                            name: newItem.product_name,
-                            description: newItem.product_description,
-                            price: newItem.product_price,
-                            category: newItem.product_category,
-                            image: newItem.product_image,
-                            quantity: newItem.quantity
-                          }
-                          
-                          // Check if item already exists
-                          const existingItem = order.items.find(item => item.id === newItem.product_id)
-                          if (existingItem) {
-                            // Update quantity
-                            const updatedItems = order.items.map(item =>
-                              item.id === newItem.product_id 
-                                ? { ...item, quantity: item.quantity + newItem.quantity }
-                                : item
-                            )
-                            return {
-                              ...order,
-                              items: updatedItems,
-                              totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                            }
-                          } else {
-                            // Add new item
-                            const updatedItems = [...order.items, newCartItem]
-                            return {
-                              ...order,
-                              items: updatedItems,
-                              totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                            }
-                          }
-                        }
-                        return order
-                      })
-                      return updatedOrders
-                    } else {
-                      // Create new person's order
-                      const newOrder = {
-                        id: newItem.id,
-                        personName: newItem.person_name,
-                        items: [{
-                          id: newItem.product_id,
-                          name: newItem.product_name,
-                          description: newItem.product_description,
-                          price: newItem.product_price,
-                          category: newItem.product_category,
-                          image: newItem.product_image,
-                          quantity: newItem.quantity
-                        }],
-                        totalSpent: newItem.total_spent,
-                        timestamp: new Date(newItem.created_at)
-                      }
-                      return [...prev, newOrder]
-                    }
-                  })
-                } else if (payload.eventType === 'UPDATE') {
-                  // Item updated
-                  const updatedItem = payload.new as RealtimeGroupOrderItem
-                  setGroupOrders(prev => 
-                    prev.map(order => {
-                      if (order.personName === updatedItem.person_name) {
-                        const updatedItems = order.items.map(item =>
-                          item.id === updatedItem.product_id 
-                            ? { ...item, quantity: updatedItem.quantity }
-                            : item
-                        )
-                        return {
-                          ...order,
-                          items: updatedItems,
-                          totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                        }
-                      }
-                      return order
-                    })
-                  )
-                } else if (payload.eventType === 'DELETE') {
-                  // Item deleted
-                  const deletedItem = payload.old as RealtimeGroupOrderItem
-                  setGroupOrders(prev => 
-                    prev.map(order => {
-                      if (order.personName === deletedItem.person_name) {
-                        const updatedItems = order.items.filter(item => item.id !== deletedItem.product_id)
-                        return {
-                          ...order,
-                          items: updatedItems,
-                          totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-                        }
-                      }
-                      return order
-                    }).filter(order => order.items.length > 0)
-                  )
+                // Immediately refresh the data when we receive an update
+                const refreshData = async () => {
+                  const { data: itemsData, error: itemsError } = await supabase
+                    .from('group_order_items')
+                    .select('*')
+                    .eq('group_order_id', groupOrderId)
+                    .order('created_at', { ascending: true })
+
+                  if (itemsError) {
+                    console.error('Error refreshing data after real-time update:', itemsError)
+      } else {
+                    console.log('Data refreshed after real-time update:', itemsData)
+                    const transformedOrders = transformSupabaseItemsToLocalFormat(itemsData)
+                    setGroupOrders(transformedOrders)
+                  }
                 }
+                
+                refreshData()
+                
+                // Simplified: Just log the event type for debugging
+                console.log('Event type:', payload.eventType, 'Payload:', payload)
               }
             )
             .subscribe((status) => {
               console.log('Subscription status:', status)
               if (status === 'SUBSCRIBED') {
+                console.log('Real-time subscription established successfully')
                 setIsRealtimeConnected(true)
+              } else if (status === 'CHANNEL_ERROR') {
+                console.error('Real-time subscription failed')
+                setIsRealtimeConnected(false)
+              } else if (status === 'TIMED_OUT') {
+                console.error('Real-time subscription timed out')
+                setIsRealtimeConnected(false)
+              } else if (status === 'CLOSED') {
+                console.log('Real-time subscription closed')
+                setIsRealtimeConnected(false)
               }
             })
 
-          // Cleanup subscription on unmount
+          // Set up periodic refresh as fallback (every 5 seconds)
+          const refreshInterval = setInterval(async () => {
+            if (groupOrderId) {
+              const { data: itemsData, error: itemsError } = await supabase
+                .from('group_order_items')
+                .select('*')
+                .eq('group_order_id', groupOrderId)
+                .order('created_at', { ascending: true })
+
+              if (!itemsError && itemsData) {
+                const transformedOrders = transformSupabaseItemsToLocalFormat(itemsData)
+                setGroupOrders(transformedOrders)
+              }
+            }
+          }, 5000)
+
+          // Cleanup subscription and interval on unmount
           return () => {
             subscription.unsubscribe()
+            clearInterval(refreshInterval)
             setIsRealtimeConnected(false)
           }
         } catch (error) {
@@ -1234,17 +1220,34 @@ export default function YolkBusinessPortal() {
 
   const addToCart = async (item: MenuItem) => {
     if (isGroupOrderMode && groupOrderId) {
-      try {
-        // Check if user already has an order in this group
-        const existingUserOrder = groupOrders.find(order => order.personName === "You")
+      // Check if order is finalized (team members can't add to finalized orders)
+      if (isTeamMemberMode && currentGroupOrder?.status === 'finalized') {
+        alert('This order has been finalized by the manager. You can no longer add items.')
+        return
+      }
+      
+      // Check budget limit for team members
+      if (isTeamMemberMode && individualBudget) {
+        const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+        const remainingBudget = Number(individualBudget) - currentSpending
         
-        if (existingUserOrder) {
+        if (remainingBudget < item.price) {
+          alert(`Sorry! This item costs £${item.price} but you only have £${remainingBudget.toFixed(2)} remaining in your budget.`)
+          return
+        }
+      }
+      try {
+      // Check if user already has an order in this group
+      const existingUserOrder = groupOrders.find(order => order.personName === "You")
+      
+      if (existingUserOrder) {
           // Check if item already exists in user's order
           const existingItem = existingUserOrder.items.find(itemInOrder => itemInOrder.id === item.id)
           
           if (existingItem) {
             // Update quantity of existing item in Supabase
-            const { error } = await supabase
+            console.log('Updating existing item in Supabase:', item.id, 'new quantity:', existingItem.quantity + 1)
+            const { data, error } = await supabase
               .from('group_order_items')
               .update({ 
                 quantity: existingItem.quantity + 1,
@@ -1253,15 +1256,19 @@ export default function YolkBusinessPortal() {
               .eq('group_order_id', groupOrderId)
               .eq('person_name', 'You')
               .eq('product_id', item.id)
+              .select()
             
             if (error) {
               console.error('Error updating item in Supabase:', error)
               // Fallback to localStorage
               updateGroupOrderLocally(item, true)
+            } else {
+              console.log('Successfully updated item in Supabase:', data)
             }
           } else {
             // Add new item to Supabase
-            const { error } = await supabase
+            console.log('Adding new item to Supabase:', item.id)
+            const { data, error } = await supabase
               .from('group_order_items')
               .insert({
                 group_order_id: groupOrderId,
@@ -1275,16 +1282,20 @@ export default function YolkBusinessPortal() {
                 quantity: 1,
                 total_spent: item.price
               })
+              .select()
             
             if (error) {
               console.error('Error adding item to Supabase:', error)
               // Fallback to localStorage
               updateGroupOrderLocally(item, false)
+            } else {
+              console.log('Successfully added item to Supabase:', data)
             }
           }
         } else {
           // Create new user order in Supabase
-          const { error } = await supabase
+          console.log('Creating new user order in Supabase for item:', item.id)
+          const { data, error } = await supabase
             .from('group_order_items')
             .insert({
               group_order_id: groupOrderId,
@@ -1298,11 +1309,14 @@ export default function YolkBusinessPortal() {
               quantity: 1,
               total_spent: item.price
             })
+            .select()
           
           if (error) {
             console.error('Error creating new order in Supabase:', error)
             // Fallback to localStorage
             updateGroupOrderLocally(item, false)
+          } else {
+            console.log('Successfully created new order in Supabase:', data)
           }
         }
              } catch (error) {
@@ -1334,29 +1348,100 @@ export default function YolkBusinessPortal() {
     const existingUserOrder = groupOrders.find(order => order.personName === "You")
     
     if (existingUserOrder) {
+        setGroupOrders(prev => {
+          const updatedOrders = prev.map(order => {
+            if (order.personName === "You") {
+            if (isExistingItem) {
+                // Increase quantity of existing item
+                const updatedItems = order.items.map(itemInOrder =>
+                  itemInOrder.id === item.id 
+                    ? { ...itemInOrder, quantity: itemInOrder.quantity + 1 }
+                    : itemInOrder
+                )
+                return {
+                  ...order,
+                  items: updatedItems,
+                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                }
+              } else {
+                // Add new item to user's order
+                const updatedItems = [...order.items, { ...item, quantity: 1 }]
+                return {
+                  ...order,
+                  items: updatedItems,
+                  totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                }
+              }
+            }
+            return order
+          })
+          
+          // Save updated group orders to localStorage
+          if (groupOrderId) {
+            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+            if (existingData) {
+              try {
+                const groupOrderData = JSON.parse(existingData)
+                groupOrderData.orders = updatedOrders
+                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+              } catch (error) {
+                console.error('Error updating group order data:', error)
+              }
+            }
+          }
+          
+          return updatedOrders
+        })
+      } else {
+        // Create new user order
+        const newOrder = {
+          id: Date.now().toString(),
+          personName: "You",
+          items: [{ ...item, quantity: 1 }],
+          totalSpent: item.price,
+          timestamp: new Date()
+        }
+        
+        setGroupOrders(prev => {
+          const updatedOrders = [...prev, newOrder]
+          
+          // Save updated group orders to localStorage
+          if (groupOrderId) {
+            const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
+            if (existingData) {
+              try {
+                const groupOrderData = JSON.parse(existingData)
+                groupOrderData.orders = updatedOrders
+                localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
+              } catch (error) {
+                console.error('Error updating group order data:', error)
+              }
+            }
+          }
+          
+          return updatedOrders
+        })
+    }
+  }
+
+  const updateQuantity = (id: string, change: number) => {
+    if (isTeamMemberMode) {
+      // Update team member's order
       setGroupOrders(prev => {
         const updatedOrders = prev.map(order => {
           if (order.personName === "You") {
-            if (isExistingItem) {
-              // Increase quantity of existing item
-              const updatedItems = order.items.map(itemInOrder =>
-                itemInOrder.id === item.id 
-                  ? { ...itemInOrder, quantity: itemInOrder.quantity + 1 }
-                  : itemInOrder
-              )
-              return {
-                ...order,
-                items: updatedItems,
-                totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+            const updatedItems = order.items.map(item => {
+              if (item.id === id) {
+                const newQuantity = Math.max(0, item.quantity + change)
+                return newQuantity === 0 ? null : { ...item, quantity: newQuantity }
               }
-            } else {
-              // Add new item to user's order
-              const updatedItems = [...order.items, { ...item, quantity: 1 }]
-              return {
-                ...order,
-                items: updatedItems,
-                totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-              }
+              return item
+            }).filter((item): item is CartItem => item !== null)
+            
+            return {
+              ...order,
+              items: updatedItems,
+              totalSpent: updatedItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)
             }
           }
           return order
@@ -1379,38 +1464,7 @@ export default function YolkBusinessPortal() {
         return updatedOrders
       })
     } else {
-      // Create new user order
-      const newOrder = {
-        id: Date.now().toString(),
-        personName: "You",
-        items: [{ ...item, quantity: 1 }],
-        totalSpent: item.price,
-        timestamp: new Date()
-      }
-      
-      setGroupOrders(prev => {
-        const updatedOrders = [...prev, newOrder]
-        
-        // Save updated group orders to localStorage
-        if (groupOrderId) {
-          const existingData = localStorage.getItem(`groupOrder_${groupOrderId}`)
-          if (existingData) {
-            try {
-              const groupOrderData = JSON.parse(existingData)
-              groupOrderData.orders = updatedOrders
-              localStorage.setItem(`groupOrder_${groupOrderId}`, JSON.stringify(groupOrderData))
-            } catch (error) {
-              console.error('Error updating group order data:', error)
-            }
-          }
-        }
-        
-        return updatedOrders
-      })
-    }
-  }
-
-  const updateQuantity = (id: string, change: number) => {
+      // Update standard cart
     setCart((prev) =>
       prev
         .map((item) => {
@@ -1422,6 +1476,7 @@ export default function YolkBusinessPortal() {
         })
         .filter((item): item is CartItem => item !== null),
     )
+    }
   }
 
   const getTotalPrice = () => {
@@ -1446,6 +1501,18 @@ export default function YolkBusinessPortal() {
 
   const addToCartFromModal = () => {
     if (selectedProduct) {
+      // Check budget limit for team members
+      if (isTeamMemberMode && individualBudget) {
+        const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+        const totalCost = selectedProduct.price * modalQuantity
+        const remainingBudget = Number(individualBudget) - currentSpending
+        
+        if (remainingBudget < totalCost) {
+          alert(`Sorry! ${modalQuantity}x ${selectedProduct.name} costs £${totalCost.toFixed(2)} but you only have £${remainingBudget.toFixed(2)} remaining in your budget.`)
+          return
+        }
+      }
+      
       for (let i = 0; i < modalQuantity; i++) {
         addToCart(selectedProduct)
       }
@@ -1453,11 +1520,47 @@ export default function YolkBusinessPortal() {
     }
   }
 
-  const completeOrder = () => {
+  const completeOrder = async () => {
+    // If this is a group order, update the payment method and status
+    if (isGroupOrderMode && groupOrderId) {
+      try {
+        const { error } = await supabase
+          .from('group_orders')
+          .update({ 
+            payment_method: paymentMethod,
+            status: 'finalized',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', groupOrderId)
+          .eq('created_by', user?.id)
+
+        if (error) {
+          console.error('Error updating group order payment:', error)
+        } else {
+          console.log('Group order payment updated successfully')
+          // Update local state
+          setCurrentGroupOrder(prev => prev ? { 
+            ...prev, 
+            payment_method: paymentMethod,
+            status: 'finalized' 
+          } : null)
+        }
+      } catch (error) {
+        console.error('Error updating group order payment:', error)
+      }
+    }
+
     setShowOrderComplete(true)
     setTimeout(() => {
       setShowOrderComplete(false)
-      setCurrentView("hero")
+      // Don't reset to hero view - stay on cart or go to appropriate view
+      if (isGroupOrderMode) {
+        // For group orders, go back to the group order dashboard
+        setCurrentView("group-order-dashboard")
+      } else {
+        // For regular orders, go back to menu
+        setCurrentView("menu")
+      }
       setCart([])
       // Reset payment method to default
       setPaymentMethod("card")
@@ -1499,12 +1602,13 @@ export default function YolkBusinessPortal() {
     setIsGroupOrderMode(false)
   }
 
-  // Reset order modal state but preserve selected venue
+  // Reset order modal state but preserve selected venue and delivery address
   const resetOrderModalPreserveVenue = () => {
     const currentSelectedVenue = selectedVenue // Save current venue
+    const currentDeliveryAddress = deliveryAddress // Save current delivery address
     setOrderStep(1)
     setDeliveryType("")
-    setDeliveryAddress("")
+    setDeliveryAddress(currentDeliveryAddress) // Preserve delivery address
     setSelectedVenue(currentSelectedVenue) // Restore venue
     setSelectedDate("")
     setSelectedHour("")
@@ -1518,6 +1622,13 @@ export default function YolkBusinessPortal() {
 
   // Open order modal
   const startOrderFlow = () => {
+    // Check if user is signed in
+    if (!user) {
+      // Redirect to login page
+      window.location.href = '/auth/signin'
+      return
+    }
+    
     resetOrderModalPreserveVenue()
     
     // Auto-detect delivery type and skip steps if venue is already selected
@@ -1571,7 +1682,7 @@ export default function YolkBusinessPortal() {
         // Create group order in Supabase
         const createGroupOrder = async () => {
           try {
-            const { error } = await supabase
+            const { data, error } = await supabase
               .from('group_orders')
               .insert({
                 id: orderId,
@@ -1582,24 +1693,32 @@ export default function YolkBusinessPortal() {
                 time: selectedTime,
                 delivery_type: deliveryType,
                 delivery_address: deliveryAddress || null,
+                payment_method: 'card', // Default to card payment
+                created_by: user?.id || null,
+                status: 'draft',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
+              .select()
+              .single()
             
-            if (error) {
+                        if (error) {
               console.error('Error creating group order in Supabase:', error)
               // Fallback to localStorage
-              const groupOrderData = {
-                budget: individualBudget,
-                teamSize: teamSize,
-                deadline: orderDeadline,
-                venue: selectedVenue,
-                time: selectedTime,
-                deliveryType: deliveryType,
-                orders: [],
-                createdAt: new Date().toISOString()
-              }
-              localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
+        const groupOrderData = {
+          budget: individualBudget,
+          teamSize: teamSize,
+          deadline: orderDeadline,
+          venue: selectedVenue,
+          time: selectedTime,
+          deliveryType: deliveryType,
+          orders: [],
+          createdAt: new Date().toISOString()
+        }
+        localStorage.setItem(`groupOrder_${orderId}`, JSON.stringify(groupOrderData))
+            } else {
+              // Store the created order data
+              setCurrentGroupOrder(data)
             }
           } catch (error) {
             console.error('Error creating group order:', error)
@@ -1631,7 +1750,7 @@ export default function YolkBusinessPortal() {
       if (orderStep === 3 && selectedVenue) {
         setOrderStep(1)
       } else {
-        setOrderStep(orderStep - 1)
+      setOrderStep(orderStep - 1)
       }
     }
   }
@@ -1662,6 +1781,60 @@ export default function YolkBusinessPortal() {
       // You could add a toast notification here
     } catch (err) {
       console.error('Failed to copy: ', err)
+    }
+  }
+
+  const finalizeGroupOrder = async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from('group_orders')
+        .update({ 
+          status: 'waiting_for_payment',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId)
+        .eq('created_by', user?.id)
+
+      if (error) {
+        console.error('Error finalizing group order:', error)
+        alert('Failed to finalize order. Please try again.')
+      } else {
+        console.log('Group order finalized successfully')
+        // Update local state
+        setCurrentGroupOrder(prev => prev ? { ...prev, status: 'waiting_for_payment' } : null)
+        alert('Order finalized successfully! Ready for payment.')
+      }
+    } catch (error) {
+      console.error('Error finalizing order:', error)
+      alert('Failed to finalize order. Please try again.')
+    }
+  }
+
+  const updateGroupOrderDetails = async (updates: Partial<RealtimeGroupOrder>) => {
+    if (!currentGroupOrder) return
+    
+    try {
+      const { error } = await supabase
+        .from('group_orders')
+        .update({ 
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', currentGroupOrder.id)
+        .eq('created_by', user?.id)
+
+      if (error) {
+        console.error('Error updating group order:', error)
+        alert('Failed to update order. Please try again.')
+      } else {
+        console.log('Group order updated successfully')
+        // Update local state
+        setCurrentGroupOrder(prev => prev ? { ...prev, ...updates } : null)
+        alert('Order updated successfully!')
+      }
+    } catch (error) {
+      console.error('Error updating order:', error)
+      alert('Failed to update order. Please try again.')
     }
   }
 
@@ -1700,8 +1873,22 @@ export default function YolkBusinessPortal() {
     }
   }
 
+  // Show loading state while auth is loading
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black text-[#f8f68f] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#f8f68f] mx-auto"></div>
+          <p className="text-[#f8f68f] text-xl font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+            LOADING...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-black text-white overflow-hidden">
+    <div className="min-h-screen bg-white text-black overflow-hidden">
       {/* Group Order Not Found Alert */}
       <AnimatePresence>
         {groupOrderNotFound && (
@@ -1864,7 +2051,7 @@ export default function YolkBusinessPortal() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="contact-email" className="text-white">
-                  Business email
+                  Business mail
                 </Label>
                 <Input
                   id="contact-email"
@@ -1963,227 +2150,12 @@ export default function YolkBusinessPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Group Order Dashboard Modal */}
-      <Dialog open={showGroupOrderDashboard} onOpenChange={setShowGroupOrderDashboard}>
-        <DialogContent className="max-w-4xl bg-zinc-900 border-zinc-800 text-white [&>button]:hidden max-h-[90vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle className="text-2xl font-light text-white uppercase text-center" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-              Group Order Dashboard
-            </DialogTitle>
-            <CardDescription className="text-gray-400 text-center">
-              Share the link below with your team
-            </CardDescription>
-            <div className="flex items-center justify-center space-x-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}></div>
-              <span className="text-xs text-gray-400">
-                {isRealtimeConnected ? 'Real-time connected' : 'Connecting...'}
-              </span>
-            </div>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Shareable Link Section */}
-            <Card className="bg-[#f8f68f]/10 border-[#f8f68f]/30">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3 mb-3">
-                  <Link className="h-5 w-5 text-[#f8f68f]" />
-                  <span className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    Shareable Link
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Input
-                    value={groupOrderUrl}
-                    readOnly
-                    className="bg-black/50 border-zinc-700 text-white flex-1"
-                  />
-                  <Button
-                    onClick={() => copyToClipboard(groupOrderUrl)}
-                    className="bg-[#f8f68f] text-black hover:bg-[#e6e346]"
-                  >
-                    Copy
-                  </Button>
-                  <Button
-                    onClick={simulateTeamMemberOrder}
-                    variant="outline"
-                    className="border-zinc-700 text-white hover:bg-zinc-800"
-                    title="Simulate team member adding item (demo)"
-                  >
-                    Demo: Add Team Item
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Order Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="bg-zinc-800/50 border-zinc-700">
-                <CardContent className="p-4 text-center">
-                  <Users className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
-                  <p className="text-gray-400 text-sm">Team Size</p>
-                  <p className="text-white font-bold text-xl">{teamSize}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-zinc-800/50 border-zinc-700">
-                <CardContent className="p-4 text-center">
-                  <CreditCard className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
-                  <p className="text-gray-400 text-sm">Budget per Person</p>
-                  <p className="text-white font-bold text-xl">£{individualBudget}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-zinc-800/50 border-zinc-700">
-                <CardContent className="p-4 text-center">
-                  <ShoppingCart className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
-                  <p className="text-gray-400 text-sm">Total Budget</p>
-                  <p className="text-white font-bold text-xl">£{Number(individualBudget) * Number(teamSize)}</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Group Order Cart */}
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    Group Order Cart
-                  </CardTitle>
-                  <Button
-                    onClick={() => {
-                      setIsGroupOrderMode(true)
-                      setShowGroupOrderDashboard(false)
-                      setCurrentView("menu")
-                    }}
-                    className="bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase text-sm"
-                    style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Items
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {groupOrders.length === 0 ? (
-                  <div className="text-center py-8">
-                    <ShoppingCart className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                    <p className="text-gray-400">No items in group order yet.</p>
-                    <p className="text-gray-400 text-sm mt-2">Share the link with your team or add items yourself!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* Combine all items from group orders */}
-                    {(() => {
-                      const allItems: { [key: string]: CartItem } = {}
-                      groupOrders.forEach(order => {
-                        order.items.forEach(item => {
-                          if (allItems[item.id]) {
-                            allItems[item.id].quantity += item.quantity
-                          } else {
-                            allItems[item.id] = { ...item }
-                          }
-                        })
-                      })
-                      return Object.values(allItems).map((item) => (
-                        <div key={item.id} className="flex items-center justify-between p-3 bg-black/30 border border-zinc-600 rounded">
-                          <div className="flex-1">
-                            <h3 className="text-white font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                              {item.name}
-                            </h3>
-                            <p className="text-gray-400 text-sm">{item.description}</p>
-                          </div>
-                          <div className="flex items-center space-x-3">
-                            <span className="text-white font-medium">£{item.price}</span>
-                            <span className="text-gray-400">x{item.quantity}</span>
-                            <span className="text-white font-bold">£{(item.price * item.quantity).toFixed(2)}</span>
-                          </div>
-                        </div>
-                      ))
-                    })()}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Budget Overview */}
-            <Card className="bg-zinc-800/50 border-zinc-700">
-              <CardHeader>
-                <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                  Budget Overview
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Total Budget:</span>
-                    <span className="text-white font-medium">£{Number(individualBudget) * Number(teamSize)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Spent:</span>
-                    <span className="text-white font-medium">£{getTotalGroupSpending(groupOrders)}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-zinc-600 pt-2">
-                    <span className="text-gray-400">Remaining:</span>
-                    <span className={`font-medium ${getRemainingGroupBudget(Number(individualBudget), Number(teamSize)) > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                      £{getRemainingGroupBudget(Number(individualBudget), Number(teamSize))}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <div className="flex gap-4 pt-6 border-t border-zinc-800 flex-shrink-0">
-              <Button
-                onClick={() => setShowGroupOrderDashboard(false)}
-                variant="outline"
-                className="flex-1 border-zinc-700 text-white hover:bg-zinc-800 uppercase text-lg"
-                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-              >
-                Close Dashboard
-              </Button>
-              <Button
-                onClick={() => {
-                  // Finalize the group order
-                  setShowGroupOrderDashboard(false)
-                  
-                  // Add all group orders to cart
-                  const allItems: CartItem[] = []
-                  groupOrders.forEach(order => {
-                    order.items.forEach(item => {
-                      const existing = allItems.find(cartItem => cartItem.id === item.id)
-                      if (existing) {
-                        existing.quantity += item.quantity
-                      } else {
-                        allItems.push({ ...item })
-                      }
-                    })
-                  })
-                  setCart(allItems)
-                  
-                  // Clear URL parameters and localStorage
-                  if (groupOrderId) {
-                    localStorage.removeItem(`groupOrder_${groupOrderId}`)
-                    // Update URL to remove group-order parameter
-                    const url = new URL(window.location.href)
-                    url.searchParams.delete('group-order')
-                    window.history.replaceState({}, '', url.toString())
-                  }
-                  
-                  // Reset group order mode and navigate to cart
-                  setIsGroupOrderMode(false)
-                  setGroupOrderId("")
-                  setGroupOrderUrl("")
-                  setCurrentView("cart")
-                }}
-                disabled={groupOrders.length === 0}
-                className="flex-1 bg-[#f8f68f] text-black hover:bg-[#e6e346] uppercase font-medium text-lg"
-                style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-              >
-                Finalize Order ({getTotalGroupSpending(groupOrders) > 0 ? `${groupOrders.length} people` : 'Empty'})
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+            {/* Group Order Dashboard Modal */}
+      <GroupOrderDashboardModal
+        isOpen={showGroupOrderDashboard}
+        onClose={() => setShowGroupOrderDashboard(false)}
+        groupOrder={currentGroupOrder}
+      />
 
       {/* Order Setup Modal */}
       <Dialog open={orderModalOpen} onOpenChange={closeOrderModal}>
@@ -2249,44 +2221,44 @@ export default function YolkBusinessPortal() {
               </motion.div>
             )}
 
-            {/* Step 2A: Address Input for Delivery */}
+                        {/* Step 2A: Address Input for Delivery */}
             {orderStep === 2 && deliveryType === "delivery" && (
-              <motion.div
+            <motion.div
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-6"
               >
-                <div className="space-y-4">
-                  <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                    <MapPin className="inline h-5 w-5 mr-2" />
-                    Delivery Address
-                  </Label>
-                  
-                  <GoogleMapComponent
-                    venues={venues}
-                    selectedVenue={selectedVenue}
-                    onVenueSelect={(venueId) => {
-                      setSelectedVenue(venueId)
-                      setSuggestedVenue(venues.find(v => v.id === venueId) || null)
-                    }}
-                    deliveryAddress={deliveryAddress}
-                    onAddressChange={setDeliveryAddress}
-                    onAddressSelect={(address) => {
-                      setDeliveryAddress(address)
-                      // Auto-select closest venue logic is handled in the map component
-                    }}
-                    isGeocodingAddress={isGeocodingAddress}
-                  />
-                  
-                  {/* Auto-selection info */}
-                  {suggestedVenue && (
-                    <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-3">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="h-4 w-4 text-[#f8f68f]" />
-                        <span className="text-white text-sm">
-                          Auto-selected nearest YOLK: <strong>{suggestedVenue.name}</strong>
-                        </span>
-                      </div>
+                    <div className="space-y-4">
+                      <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        <MapPin className="inline h-5 w-5 mr-2" />
+                        Delivery Address
+                      </Label>
+                      
+                      <GoogleMapComponent
+                        venues={venues}
+                        selectedVenue={selectedVenue}
+                        onVenueSelect={(venueId) => {
+                          setSelectedVenue(venueId)
+                          setSuggestedVenue(venues.find(v => v.id === venueId) || null)
+                        }}
+                        deliveryAddress={deliveryAddress}
+                        onAddressChange={setDeliveryAddress}
+                        onAddressSelect={(address) => {
+                          setDeliveryAddress(address)
+                          // Auto-select closest venue logic is handled in the map component
+                        }}
+                        isGeocodingAddress={isGeocodingAddress}
+                      />
+                      
+                      {/* Auto-selection info */}
+                      {suggestedVenue && (
+                        <div className="bg-[#f8f68f]/10 border border-[#f8f68f]/30 rounded-lg p-3">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="h-4 w-4 text-[#f8f68f]" />
+                            <span className="text-white text-sm">
+                              Auto-selected nearest YOLK: <strong>{suggestedVenue.name}</strong>
+                            </span>
+                          </div>
                     </div>
                   )}
                 </div>
@@ -2300,37 +2272,37 @@ export default function YolkBusinessPortal() {
                 animate={{ opacity: 1, x: 0 }}
                 className="space-y-4"
               >
-                <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                  <Building2 className="inline h-5 w-5 mr-2" />
-                  Choose Collection Point
-                </Label>
-                <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
-                  {venues.map((venue) => (
-                    <Card 
-                      key={venue.id}
-                      className={`cursor-pointer transition-all duration-200 ${
-                        selectedVenue === venue.id 
-                          ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
-                          : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
-                      }`}
-                      onClick={() => setSelectedVenue(venue.id)}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                              {venue.name}
-                            </h3>
-                            <p className="text-gray-400 text-xs leading-tight">{venue.address}</p>
-                          </div>
-                          {selectedVenue === venue.id && (
-                            <CheckCircle className="h-5 w-5 text-[#f8f68f] ml-2 flex-shrink-0" />
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                    <Label className="text-white text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                      <Building2 className="inline h-5 w-5 mr-2" />
+                      Choose Collection Point
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+                      {venues.map((venue) => (
+                        <Card 
+                          key={venue.id}
+                          className={`cursor-pointer transition-all duration-200 ${
+                            selectedVenue === venue.id 
+                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
+                          }`}
+                          onClick={() => setSelectedVenue(venue.id)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                                  {venue.name}
+                                </h3>
+                                <p className="text-gray-400 text-xs leading-tight">{venue.address}</p>
+                              </div>
+                              {selectedVenue === venue.id && (
+                                <CheckCircle className="h-5 w-5 text-[#f8f68f] ml-2 flex-shrink-0" />
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
               </motion.div>
             )}
 
@@ -2505,7 +2477,7 @@ export default function YolkBusinessPortal() {
                  animate={{ opacity: 1, x: 0 }}
                  className="space-y-6"
                >
-                 <div className="grid grid-cols-1 gap-4">
+                 <div className="grid grid-cols-2 gap-4">
                    <Card 
                      className={`cursor-pointer transition-all duration-200 ${
                        orderType === "standard"
@@ -2548,7 +2520,7 @@ export default function YolkBusinessPortal() {
                      animate={{ opacity: 1, y: 0 }}
                      className="space-y-4 p-4 bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded"
                    >
-                     <h4 className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                     <h4 className="text-white font-medium text-2xl uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                        Configure Individual Choice Order
                      </h4>
                      
@@ -2573,15 +2545,6 @@ export default function YolkBusinessPortal() {
                        </div>
                      </div>
 
-                     <div className="space-y-2">
-                       <Label className="text-white">Order deadline</Label>
-                       <Input
-                         value={orderDeadline}
-                         onChange={(e) => setOrderDeadline(e.target.value)}
-                         placeholder="2 days before pickup"
-                         className="bg-black/50 border-zinc-700 text-white placeholder:text-gray-500"
-                       />
-                     </div>
 
                      <div className="bg-black/30 border border-zinc-700 rounded p-3">
                        <div className="flex items-center space-x-2 mb-2">
@@ -2624,7 +2587,7 @@ export default function YolkBusinessPortal() {
                 </Button>
               )}
 
-              <Button
+                            <Button
                 onClick={nextOrderStep}
                 disabled={
                   (orderStep === 1 && !deliveryType) ||
@@ -2638,8 +2601,8 @@ export default function YolkBusinessPortal() {
                 style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
               >
                 {orderStep === 4 ? "Create Order" : "Continue"}
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </Button>
             </div>
           </div>
         </DialogContent>
@@ -2662,31 +2625,60 @@ export default function YolkBusinessPortal() {
               
               {/* Navigation Items */}
               <div className="flex items-center space-x-6 text-xl">
+              {isManager && (
                 <button 
-                  onClick={startOrderFlow}
+                  onClick={() => {
+                    document.getElementById('order-section')?.scrollIntoView({ 
+                      behavior: 'smooth' 
+                    })
+                  }}
                   className="text-black hover:text-gray-700 font-medium" 
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
                   ORDER
                 </button>
+              )}
                 <a href="#" className="text-black hover:text-gray-700 font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                   LOCATIONS
                 </a>
                 <button 
-                  onClick={() => setCurrentView("menu")}
+                onClick={() => {
+                  if (isTeamMemberMode && groupOrderId) {
+                    document.getElementById('menu-section')?.scrollIntoView({ 
+                      behavior: 'smooth' 
+                    })
+                  } else {
+                    setCurrentView("menu")
+                  }
+                }}
                   className="text-black hover:text-gray-700 font-medium" 
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                 >
                   MENUS
                 </button>
-                <a href="#" className="text-black hover:text-gray-700 font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                  BREWCLUB
-                </a>
+              {user && isManager && (
+                <button 
+                  onClick={() => window.location.href = '/orders'}
+                  className="text-black hover:text-gray-700 font-medium" 
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  MY ORDERS
+                </button>
+              )}
+              {user && (
+                <button 
+                  onClick={() => window.location.href = '/account'}
+                  className="text-black hover:text-gray-700 font-medium" 
+                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                >
+                  ACCOUNT
+                </button>
+              )}
               </div>
             </div>
             
             {/* Order Info Display */}
-            {selectedVenue && selectedTime && (
+            {isManager && selectedVenue && selectedTime && (
               <div className="flex items-center space-x-4">
                 <button 
                   onClick={startOrderFlow}
@@ -2718,12 +2710,58 @@ export default function YolkBusinessPortal() {
                       })}
                     </span>
                   </div>
+                  {/* Budget display for team members */}
+                  {isTeamMemberMode && individualBudget && (
+                    <>
+                      <div className="w-px h-4 bg-black/30"></div>
+                      <div className="flex items-center space-x-2">
+                        <CreditCard className="h-4 w-4 text-black" />
+                        <div className="text-right">
+                          <div className="text-black font-medium text-sm" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            £{groupOrders.find(order => order.personName === "You")?.totalSpent || 0} / £{individualBudget}
+                          </div>
+                          <div className={`text-xs ${
+                            (() => {
+                              const remaining = Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))
+                              const percentage = (remaining / Number(individualBudget)) * 100
+                              if (percentage <= 10) return 'text-red-600 font-medium'
+                              if (percentage <= 25) return 'text-orange-600 font-medium'
+                              return 'text-black opacity-70'
+                            })()
+                          }`}>
+                            {Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))} remaining
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </button>
 
                 {/* Cart Button */}
-                {getTotalItems() > 0 && (
+                {isTeamMemberMode ? (
+                  // Team member cart button
+                  (() => {
+                    const userOrder = groupOrders.find(order => order.personName === "You")
+                    const userItemCount = userOrder?.items.reduce((sum, item) => sum + item.quantity, 0) || 0
+                    return userItemCount > 0 ? (
+                      <Button
+                        onClick={() => window.location.href = `/cart?group-order=${groupOrderId}`}
+                        className="bg-black text-[#f8f68f] hover:bg-gray-800 relative shadow-lg font-medium uppercase text-lg px-4 py-2"
+                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                      >
+                        <ShoppingCart className="h-4 w-4 mr-2" />
+                        My Order ({userItemCount})
+                        <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs">
+                          {userItemCount}
+                        </Badge>
+                      </Button>
+                    ) : null
+                  })()
+                ) : isManager && (
+                  // Standard cart button for managers only
+                  getTotalItems() > 0 && (
                   <Button
-                    onClick={() => setCurrentView("cart")}
+                    onClick={() => window.location.href = '/cart'}
                     className="bg-black text-[#f8f68f] hover:bg-gray-800 relative shadow-lg font-medium uppercase text-lg px-4 py-2"
                     style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
                   >
@@ -2733,8 +2771,41 @@ export default function YolkBusinessPortal() {
                       {getTotalItems()}
                     </Badge>
                   </Button>
+                  )
                 )}
               </div>
+            )}
+
+            {/* Sign Out Button - Always show when signed in */}
+            {user && (
+              <div className="flex items-center ml-4">
+                <Button
+                  onClick={async () => {
+                    await signOut()
+                    setCurrentView("hero")
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="border-black text-[#f8f68f] hover:bg-black hover:text-white text-sm"
+                >
+                  Sign Out
+                </Button>
+              </div>
+            )}
+
+            {/* Sign In Button - Only show when not signed in */}
+            {!user && !loading && (
+              <Button
+                onClick={() => window.location.href = '/auth/signin'}
+                className="bg-black text-[#f8f68f] hover:bg-gray-800 font-medium text-sm"
+              >
+                Log in
+              </Button>
+            )}
+
+            {/* Loading indicator */}
+            {loading && (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
             )}
           </div>
         </div>
@@ -2742,7 +2813,7 @@ export default function YolkBusinessPortal() {
       
       <AnimatePresence mode="wait">
         {currentView === "hero" && (
-          <div className="min-h-screen relative overflow-hidden">
+          <div className="min-h-[110vh] md:min-h-[130vh] relative overflow-hidden">
             {/* Hero Background Image */}
             <div className="absolute inset-0">
               <img 
@@ -2756,6 +2827,163 @@ export default function YolkBusinessPortal() {
             {/* Hero Content */}
             <div className="relative z-10 min-h-screen flex items-center justify-center pt-[10rem]">
               <div className="max-w-7xl mx-auto px-6">
+
+                
+                {isTeamMemberMode && groupOrderId ? (
+                  // Team Member Hero - Custom for group order participants
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+                    
+                    {/* Left Side - Group Order Info */}
+                    <motion.div
+                      key="team-hero-content"
+                      initial={{ opacity: 0, x: -50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 50 }}
+                      transition={{ duration: 0.8 }}
+                      className="text-white space-y-8"
+                    >
+                      <div className="space-y-6">
+                        <Badge className="bg-[#f8f68f] text-black px-4 py-2 text-sm font-medium uppercase tracking-wider">
+                          Group Order
+                        </Badge>
+                        <h1 className="text-5xl lg:text-6xl font-bold leading-tight uppercase" style={{ fontFamily: 'alternate-gothic-atf, serif' }}>
+                          Your Team's
+                          <span className="block text-[#f8f68f]">Order Awaits</span>
+                        </h1>
+                        <p className="text-xl text-zinc-100 leading-relaxed max-w-lg">
+                          You've been invited to join a group order! Choose your items within your budget and we'll handle the rest.
+                        </p>
+                      </div>
+
+                      {/* Order Details Card */}
+                      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-100">Restaurant:</span>
+                            <span className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              YOLK {venues.find(v => v.id === selectedVenue)?.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-100">Date & time:</span>
+                            <span className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              {new Date(selectedTime).toLocaleDateString('en-GB', { 
+                                weekday: 'short', 
+                                day: 'numeric', 
+                                month: 'short'
+                              })} {new Date(selectedTime).toLocaleTimeString('en-GB', {
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-zinc-100">Your budget:</span>
+                            <span className="text-[#f8f68f] font-bold text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                              £{individualBudget}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-4">
+                        <Button
+                          onClick={() => {
+                            document.getElementById('menu-section')?.scrollIntoView({ 
+                              behavior: 'smooth' 
+                            })
+                          }}
+                          className="bg-[#f8f68f] text-black hover:bg-[#f8ffff] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
+                          style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                        >
+                          Start Ordering
+                          <ArrowRight className="ml-2 h-6 w-6" />
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            // Exit group order
+                            const url = new URL(window.location.href)
+                            url.searchParams.delete('group-order')
+                            window.history.replaceState({}, '', url.toString())
+                            setIsGroupOrderMode(false)
+                            setIsTeamMemberMode(false)
+                            setGroupOrderId("")
+                            setGroupOrderUrl("")
+                          }}
+                          variant="outline"
+                          className="text-white hover:bg-zinc-700 hover:text-white px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase"
+                          style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                        >
+                          Exit Order
+                        </Button>
+                      </div>
+                    </motion.div>
+
+                    {/* Right Side - How It Works */}
+                    <motion.div
+                      initial={{ opacity: 0, x: 50 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -50 }}
+                      transition={{ delay: 0.3, duration: 0.8 }}
+                      className="space-y-6"
+                    >
+                      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                        <div className="flex items-center space-x-3 mb-4">
+                          <div className="bg-[#f8f68f] p-3 rounded-full">
+                            <CheckCircle className="h-6 w-6 text-black" />
+                          </div>
+                          <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            YOLK YES!
+                          </h3>
+                        </div>
+                        <p className="text-zinc-100 text-sm leading-relaxed">
+                          Next-level sandwiches for next-level occasions. Premium catering with fresh ingredients, creative combinations, and exceptional service. No more sad desk salads!
+                        </p>
+                      </div>
+
+                      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
+                        <div className="flex items-center space-x-3 mb-4">
+                          <div className="bg-[#f8f68f] p-3 rounded-full">
+                            <ShoppingCart className="h-6 w-6 text-black" />
+                          </div>
+                          <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            How It Works
+                          </h3>
+                        </div>
+                        <div className="space-y-3 text-sm">
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-[#f8f68f] text-black w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                              1
+                            </div>
+                            <p className="text-zinc-200">Browse our menu and add items to your order</p>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-[#f8f68f] text-black w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                              2
+                            </div>
+                            <p className="text-zinc-200">Stay within your £{individualBudget} budget limit</p>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-[#f8f68f] text-black w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                              3
+                            </div>
+                            <p className="text-zinc-200">Review and confirm your order</p>
+                          </div>
+                          <div className="flex items-start space-x-3">
+                            <div className="bg-[#f8f68f] text-black w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
+                              4
+                            </div>
+                            <p className="text-zinc-200">Your team manager will finalize the group order</p>
+                          </div>
+                        </div>
+                      </div>
+
+
+                    </motion.div>
+                  </div>
+                ) : (
+                  // Standard Hero - For managers and regular users
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
                   
                   {/* Left Side - Main Content */}
@@ -2769,19 +2997,21 @@ export default function YolkBusinessPortal() {
                   >
                     <div className="space-y-4">
                       <Badge className="bg-[#000000] text-white px-4 py-2 text-sm font-medium uppercase tracking-wider">
-                        Business
+                        Group orders
                       </Badge>
-                      <h1 className="text-5xl lg:text-7xl font-bold leading-tight uppercase" style={{ fontFamily: 'alternate-gothic-atf, serif' }}>
+                      <h1 className="lg:text-6xl xl:text-7xl text-6xl font-bold leading-tight uppercase" style={{ fontFamily: 'alternate-gothic-atf, serif' }}>
                         Next-level
                         <span className="block text-[#f8f68f]">sandwiches</span>
-                        for next-level teams
+                          for any occasion.
                       </h1>
-                      <p className="text-xl text-zinc-200 leading-relaxed max-w-lg">
-                        Because your office deserves better than bland. Premium catering with flexible invoicing and VIP service for verified business partners.
+                      <p className="text-xl text-zinc-100 leading-relaxed max-w-lg">
+                        Because your office deserves better than bland. Group orders with flexible invoicing and VIP service for verified partners.
                       </p>
                     </div>
 
                                           <div className="flex flex-col sm:flex-row gap-4">
+                        {isManager ? (
+                          <>
                         <Button
                           onClick={() => {
                             document.getElementById('order-section')?.scrollIntoView({ 
@@ -2802,23 +3032,29 @@ export default function YolkBusinessPortal() {
                       >
                         Become Partner
                       </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              onClick={() => window.location.href = '/auth/signin'}
+                              className="bg-[#f8f68f] text-black hover:bg-[#f8ffff] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
+                              style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                            >
+                              Log in
+                              <ArrowRight className="ml-2 h-6 w-6" />
+                            </Button>
+                            <Button
+                              onClick={() => setCurrentView("apply")}
+                              variant="outline"
+                              className="text-white hover:bg-zinc-700 hover:text-white px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase"
+                              style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                            >
+                              Become Partner
+                            </Button>
+                          </>
+                        )}
                     </div>
 
-                    {/* Trust Indicators */}
-                    <div className="flex items-center space-x-8 pt-8">
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle className="h-5 w-5 text-[#f8f68f]" />
-                        <span className="text-white font-medium">Verified Partners</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="h-5 w-5 text-[#f8f68f]" />
-                        <span className="text-white font-medium">3+ Days Notice</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <CreditCard className="h-5 w-5 text-[#f8f68f]" />
-                        <span className="text-white font-medium">30-Day Terms</span>
-                      </div>
-                    </div>
                   </motion.div>
 
                   {/* Right Side - Features Grid */}
@@ -2827,7 +3063,7 @@ export default function YolkBusinessPortal() {
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -50 }}
                     transition={{ delay: 0.3, duration: 0.8 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+                    className="grid grid-cols-2 lg:grid-cols-1 gap-6"
                   >
                     <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
                       <div className="flex items-center space-x-3 mb-4">
@@ -2843,33 +3079,6 @@ export default function YolkBusinessPortal() {
                       </p>
                     </div>
 
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="bg-[#f8f68f] p-3 rounded-full">
-                          <Building2 className="h-6 w-6 text-black" />
-                        </div>
-                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          London Wide
-                        </h3>
-                      </div>
-                      <p className="text-gray-200 text-sm leading-relaxed">
-                        Delivery & collection from 10 locations across London. From Canary Wharf to Soho, we've got you covered.
-                      </p>
-                    </div>
-
-                    <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
-                      <div className="flex items-center space-x-3 mb-4">
-                        <div className="bg-[#f8f68f] p-3 rounded-full">
-                          <Clock className="h-6 w-6 text-black" />
-                        </div>
-                        <h3 className="text-xl font-bold uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          Premium Service
-                        </h3>
-                      </div>
-                      <p className="text-gray-200 text-sm leading-relaxed">
-                        Dedicated account managers, priority scheduling, and white-glove delivery service for business partners.
-                      </p>
-                    </div>
 
                     <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6 text-white">
                       <div className="flex items-center space-x-3 mb-4">
@@ -2886,11 +3095,13 @@ export default function YolkBusinessPortal() {
                     </div>
                   </motion.div>
                 </div>
+                )}
               </div>
             </div>
 
-            {/* Scroll Indicator */}
-            <div className="absolute bottom-8 left-0 right-0 flex justify-center">
+            {/* Scroll Indicator - Only for standard hero */}
+            {!isTeamMemberMode && (
+            <div className="absolute bottom-8 left-0 right-0 flex justify-center pb-8">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -2907,11 +3118,13 @@ export default function YolkBusinessPortal() {
                 </div>
               </motion.div>
             </div>
+            )}
           </div>
         )}
 
-        {/* Order Section - Always visible */}
-        <section id="order-section" className="min-h-screen bg-white py-20">
+        {/* Order Section - Only visible when NOT in group order mode */}
+        {!isGroupOrderMode && (
+          <section id="order-section" className="min-h-screen bg-white py-20">
           <div className="max-w-6xl mx-auto px-6">
             <motion.div
               initial={{ opacity: 0, y: 50 }}
@@ -3040,14 +3253,8 @@ export default function YolkBusinessPortal() {
                 </motion.div>
               </div>
 
-              {/* Start Your Order Button - Centered on Separate Row */}
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.8 }}
-                viewport={{ once: true }}
-                className="flex justify-center"
-              >
+                            {/* Start Your Order Button - Centered on Separate Row */}
+              <div className="flex justify-center">
                 <Button
                   onClick={startOrderFlow}
                   className="bg-[#f8f68f] text-black hover:bg-[#e6e346] px-8 py-6 text-xl font-bold rounded-full transition-all duration-300 uppercase shadow-2xl transform hover:scale-105"
@@ -3056,10 +3263,12 @@ export default function YolkBusinessPortal() {
                   Start Your Order
                   <ArrowRight className="ml-2 h-6 w-6" />
                 </Button>
-              </motion.div>
+              </div>
+
             </div>
           </div>
         </section>
+        )}
 
         {currentView === "apply" && (
           <div className="min-h-screen bg-black flex items-center justify-center pt-20">
@@ -3177,21 +3386,16 @@ export default function YolkBusinessPortal() {
           </div>
         )}
 
-        {currentView === "menu" && (
-          <motion.div
-            key="menu"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            transition={{ duration: 0.6 }}
-            className="min-h-screen p-6 pt-24"
-          >
+        {/* Menu Section - Always visible when in team member mode, or when menu view is active (but not when in cart) */}
+        {((isTeamMemberMode && groupOrderId) || currentView === "menu") && currentView !== "cart" && (
+          <section id="menu-section" className="min-h-screen bg-white p-6">
             <div className="max-w-7xl mx-auto">
               <div className="flex items-center justify-between mb-8 pt-10">
                 <div>
-                  <h1 className="text-4xl font-light text-white mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Menu</h1>
-                  <p className="text-gray-300">Curated selections for large groups.</p>
+                  <h1 className="text-4xl font-light text-black mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Menu</h1>
+                  <p className="text-zinc-700">Curated selections for large groups.</p>
                 </div>
+                {!isTeamMemberMode && (
                 <Button
                   onClick={() => {
                     if (isGroupOrderMode) {
@@ -3207,6 +3411,7 @@ export default function YolkBusinessPortal() {
                 >
                   {isGroupOrderMode ? "Back to Dashboard" : "Back"}
                 </Button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -3225,7 +3430,7 @@ export default function YolkBusinessPortal() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.1, duration: 0.6 }}
                   >
-                    <Card className="bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 transition-all duration-300 overflow-hidden group cursor-pointer">
+                    <Card className="bg-zinc-100/50 border-zinc-100 hover:border-zinc-200 transition-all duration-300 overflow-hidden group cursor-pointer">
                       <div 
                         className="relative overflow-hidden"
                         onClick={() => openProductModal(item)}
@@ -3242,11 +3447,41 @@ export default function YolkBusinessPortal() {
                         className="p-6 cursor-pointer"
                         onClick={() => openProductModal(item)}
                       >
-                        <h3 className="text-2xl uppercase font-medium text-white mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>{item.name}</h3>
-                        <p className="text-zinc-400 text-sm mb-4 line-clamp-2">{item.description}</p>
+                        <h3 className="text-2xl uppercase font-medium text-black mb-2" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>{item.name}</h3>
+                        <p className="text-zinc-700 text-sm mb-4 line-clamp-2">{item.description}</p>
                         <div className="flex items-center justify-between">
-                          <span className="text-lg font-light text-white">£{item.price}</span>
+                          <span className="text-lg font-light text-black">£{item.price}</span>
+                          {(() => {
+                            // Check if item is affordable for team members
+                            if (isTeamMemberMode && individualBudget) {
+                              const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+                              const remainingBudget = Number(individualBudget) - currentSpending
+                              const isAffordable = remainingBudget >= item.price
+                              
+                              return (
                           <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    if (isAffordable) {
+                                      openProductModal(item)
+                                    } else {
+                                      alert(`Sorry! This item costs £${item.price} but you only have £${remainingBudget.toFixed(2)} remaining in your budget.`)
+                                    }
+                                  }}
+                                  size="sm"
+                                  className={`rounded-full transition-transform ${
+                                    isAffordable 
+                                      ? 'bg-black text-white hover:bg-zinc-800' 
+                                      : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                  }`}
+                                  disabled={!isAffordable}
+                                >
+                                  <Plus className="h-6 w-6" />
+                                </Button>
+                              )
+                            } else {
+                              return (
+                                <Button
                             onClick={(e) => {
                               e.stopPropagation()
                               openProductModal(item)
@@ -3256,6 +3491,9 @@ export default function YolkBusinessPortal() {
                           >
                             <Plus className="h-6 w-6" />
                           </Button>
+                              )
+                            }
+                          })()}
                         </div>
                       </CardContent>
                     </Card>
@@ -3263,232 +3501,10 @@ export default function YolkBusinessPortal() {
                 ))}
               </div>
             </div>
-          </motion.div>
+          </section>
         )}
 
-        {currentView === "cart" && (
-          <motion.div
-            key="cart"
-            initial={{ opacity: 0, x: 100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -100 }}
-            transition={{ duration: 0.6 }}
-            className="min-h-screen p-6 pt-24"
-          >
-            <div className="max-w-4xl mx-auto">
-              <div className="flex items-center justify-between mb-8 pt-14">
-                <h1 className="text-4xl font-light text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Order summary</h1>
-                <Button
-                  onClick={() => setCurrentView("menu")}
-                  variant="outline"
-                  className="border-zinc-700 text-white hover:bg-zinc-800 uppercase text-xl"
-                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
-                >
-                  Back to Menu
-                </Button>
-              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 space-y-4">
-                  {cart.length === 0 ? (
-                    <Card className="bg-zinc-900/50 border-zinc-800 p-8 text-center">
-                      <div className="space-y-4">
-                        <p className="text-gray-400 text-lg">Your cart is lonelier than a sad desk salad</p>
-                        <p className="text-[#f8f68f] font-medium" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          LET'S FIX THAT!
-                        </p>
-                      </div>
-                    </Card>
-                  ) : (
-                    cart.map((item) => (
-                      <Card key={item.id} className="bg-zinc-900/50 border-zinc-800">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <h3 className="text-2xl font-medium text-white" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>{item.name}</h3>
-                              <p className="text-gray-400 text-sm">{item.description}</p>
-                              <p className="text-white text-xl font-medium mt-2">£{item.price}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Button
-                                onClick={() => updateQuantity(item.id, -1)}
-                                size="sm"
-                                variant="outline"
-                                className="border-zinc-700 text-white hover:bg-zinc-800"
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <span className="text-white font-medium w-8 text-center">{item.quantity}</span>
-                              <Button
-                                onClick={() => updateQuantity(item.id, 1)}
-                                size="sm"
-                                variant="outline"
-                                className="border-zinc-700 text-white hover:bg-zinc-800"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-
-                <div className="space-y-6">
-                  <Card className="bg-zinc-900/50 border-zinc-800">
-                    <CardHeader>
-                      <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Order Details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      {/* Pickup Location */}
-                      <div className="space-y-2">
-                        <Label className="text-white flex items-center text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          Pickup Location
-                        </Label>
-                        <div className="bg-black/30 border border-zinc-700 rounded p-3">
-                          <p className="text-white font-medium">
-                            {venues.find(v => v.id === selectedVenue)?.name}
-                          </p>
-                          <p className="text-zinc-400 text-sm">
-                            {venues.find(v => v.id === selectedVenue)?.address}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {/* Pickup Time */}
-                      <div className="space-y-2">
-                        <Label className="text-white flex items-center text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                          Pickup Time
-                        </Label>
-                        <div className="bg-black/30 border border-zinc-700 rounded p-3">
-                          <p className="text-white font-medium">
-                            {new Date(selectedTime).toLocaleDateString('en-GB', { 
-                              weekday: 'long', 
-                              day: 'numeric', 
-                              month: 'long',
-                              year: 'numeric'
-                            })}
-                          </p>
-                          <p className="text-zinc-400 text-sm">
-                            {new Date(selectedTime).toLocaleTimeString('en-GB', { 
-                              hour: 'numeric', 
-                              minute: '2-digit',
-                              hour12: true
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Payment Method Selection */}
-                  <Card className="bg-zinc-900/50 border-zinc-800">
-                    <CardHeader>
-                      <CardTitle className="text-white uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Payment Method</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 gap-3">
-                        <Card 
-                          className={`cursor-pointer transition-all duration-200 ${
-                            paymentMethod === "card"
-                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
-                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
-                          }`}
-                          onClick={() => setPaymentMethod("card")}
-                        >
-                          <CardContent className="p-4 text-center">
-                            <CreditCard className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
-                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                              Card Payment
-                            </h3>
-                            <p className="text-gray-400 text-xs">Pay now with card</p>
-                          </CardContent>
-                        </Card>
-
-                        <Card 
-                          className={`cursor-pointer transition-all duration-200 ${
-                            paymentMethod === "invoice"
-                              ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
-                              : 'bg-black/30 border-zinc-700 hover:border-zinc-600'
-                          }`}
-                          onClick={() => {
-                            if (!isInvoiceApproved) {
-                              setShowInvoiceApplication(true)
-                            } else {
-                              setPaymentMethod("invoice")
-                            }
-                          }}
-                        >
-                          <CardContent className="p-4 text-center">
-                            <FileText className="h-8 w-8 mx-auto mb-2 text-[#f8f68f]" />
-                            <h3 className="text-white font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                              Invoice
-                            </h3>
-                            <p className="text-gray-400 text-xs">
-                              {isInvoiceApproved ? "Approved - Pay later" : "Apply for invoice terms"}
-                            </p>
-                            {isInvoiceApproved && (
-                              <Badge className="mt-2 bg-green-600 text-white text-xs">APPROVED</Badge>
-                            )}
-                          </CardContent>
-                        </Card>
-                      </div>
-                      
-                      {paymentMethod === "invoice" && isInvoiceApproved && (
-                        <div className="bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded p-3">
-                          <div className="flex items-center space-x-2">
-                            <CheckCircle className="h-4 w-4 text-[#f8f68f]" />
-                            <p className="text-white text-sm">
-                              Invoice terms approved. Payment due within 30 days.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="bg-zinc-900/50 border-zinc-800">
-                    <CardHeader>
-                      <CardTitle className="text-white uppercase text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Total</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-zinc-400">
-                          <span>Subtotal</span>
-                          <span>£{getTotalPrice()}</span>
-                        </div>
-                        {guestCount && (
-                          <div className="flex justify-between text-white font-medium text-lg pt-2 border-t border-gray-700">
-                            <span>Total ({guestCount} guests)</span>
-                            <span>£{getTotalPrice() * Number.parseInt(guestCount || "0")}</span>
-                          </div>
-                        )}
-                      </div>
-                      <Button
-                        onClick={completeOrder}
-                        className="w-full mt-6 bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123] font-medium uppercase shadow-lg text-xl"
-                        style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
-                        disabled={!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 || (paymentMethod === "invoice" && !isInvoiceApproved)}
-                      >
-                        {!selectedVenue || !selectedDate || !selectedHour || cart.length === 0 
-                          ? "COMPLETE YOUR ORDER" 
-                          : paymentMethod === "invoice" && !isInvoiceApproved
-                          ? "APPLY FOR INVOICE TERMS"
-                          : "YOLK YES! LET'S GO"}
-                      </Button>
-                      <p className="text-xs text-gray-400 mt-2 text-center">
-                        {paymentMethod === "card" 
-                          ? "Secure payment processing" 
-                          : "Pay later, party now - we trust you!"}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
       </AnimatePresence>
       
       {/* Product Details Modal */}
@@ -3599,11 +3615,45 @@ export default function YolkBusinessPortal() {
                   </div>
                 </div>
 
+                {/* Budget warning for team members */}
+                {isTeamMemberMode && individualBudget && (() => {
+                  const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+                  const totalCost = selectedProduct.price * modalQuantity
+                  const remainingBudget = Number(individualBudget) - currentSpending
+                  const isOverBudget = remainingBudget < totalCost
+                  
+                  return isOverBudget ? (
+                    <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3 mb-4">
+                      <div className="flex items-center space-x-2">
+                        <X className="h-4 w-4 text-red-400" />
+                        <span className="text-red-400 text-sm">
+                          This would exceed your budget by £{(totalCost - remainingBudget).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null
+                })()}
+
                 {/* Continue Button */}
                 <Button
                   onClick={addToCartFromModal}
-                  className="w-full bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123] font-bold uppercase text-xl py-3 shadow-lg"
+                  className={`w-full font-bold uppercase text-xl py-3 shadow-lg ${
+                    isTeamMemberMode && individualBudget && (() => {
+                      const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+                      const totalCost = selectedProduct.price * modalQuantity
+                      const remainingBudget = Number(individualBudget) - currentSpending
+                      return remainingBudget < totalCost
+                    })()
+                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                      : 'bg-[#f8f68f] text-black hover:from-[#e6e346] hover:to-[#d4d123]'
+                  }`}
                   style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}
+                  disabled={isTeamMemberMode && individualBudget ? (() => {
+                    const currentSpending = groupOrders.find(order => order.personName === "You")?.totalSpent || 0
+                    const totalCost = selectedProduct.price * modalQuantity
+                    const remainingBudget = Number(individualBudget) - currentSpending
+                    return remainingBudget < totalCost
+                  })() : false}
                 >
                   ADD TO CART - £{(selectedProduct.price * modalQuantity).toFixed(2)}
                 </Button>

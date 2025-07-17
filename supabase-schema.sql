@@ -1,67 +1,88 @@
+-- Enable necessary extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create company_profiles table
+CREATE TABLE IF NOT EXISTS company_profiles (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  company_name TEXT,
+  company_address TEXT,
+  company_size TEXT CHECK (company_size IN ('1-10', '11-50', '51-200', '201-500', '500+')),
+  contact_person TEXT,
+  phone TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id)
+);
+
 -- Create group_orders table
 CREATE TABLE IF NOT EXISTS group_orders (
-  id TEXT PRIMARY KEY,
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  order_id TEXT UNIQUE NOT NULL,
+  created_by UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  venue TEXT NOT NULL,
+  delivery_address TEXT NOT NULL,
+  delivery_date DATE NOT NULL,
+  delivery_time TIME NOT NULL,
   budget DECIMAL(10,2) NOT NULL,
   team_size INTEGER NOT NULL,
-  deadline TEXT NOT NULL,
-  venue TEXT NOT NULL,
-  time TEXT NOT NULL,
-  delivery_type TEXT NOT NULL CHECK (delivery_type IN ('delivery', 'collection')),
-  delivery_address TEXT,
+  status TEXT DEFAULT 'draft' CHECK (status IN ('draft', 'finalized')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create group_order_items table
 CREATE TABLE IF NOT EXISTS group_order_items (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  group_order_id TEXT NOT NULL REFERENCES group_orders(id) ON DELETE CASCADE,
-  person_name TEXT NOT NULL,
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  group_order_id UUID REFERENCES group_orders(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   product_name TEXT NOT NULL,
-  product_description TEXT NOT NULL,
+  product_description TEXT,
   product_price DECIMAL(10,2) NOT NULL,
   product_category TEXT NOT NULL,
-  product_image TEXT NOT NULL,
+  product_image TEXT,
   quantity INTEGER NOT NULL DEFAULT 1,
-  total_spent DECIMAL(10,2) NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  added_by TEXT DEFAULT 'anonymous',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_group_order_items_group_order_id ON group_order_items(group_order_id);
-CREATE INDEX IF NOT EXISTS idx_group_order_items_person_name ON group_order_items(person_name);
-CREATE INDEX IF NOT EXISTS idx_group_order_items_product_id ON group_order_items(product_id);
-
 -- Enable Row Level Security
+ALTER TABLE company_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE group_orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE group_order_items ENABLE ROW LEVEL SECURITY;
 
--- Create policies for group_orders table
-CREATE POLICY "Allow public read access to group orders" ON group_orders
+-- Company profiles policies
+CREATE POLICY "Users can view their own company profile" ON company_profiles
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own company profile" ON company_profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own company profile" ON company_profiles
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- Group orders policies
+CREATE POLICY "Anyone can view group orders" ON group_orders
   FOR SELECT USING (true);
 
-CREATE POLICY "Allow public insert access to group orders" ON group_orders
-  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Authenticated users can create group orders" ON group_orders
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 
-CREATE POLICY "Allow public update access to group orders" ON group_orders
-  FOR UPDATE USING (true);
+CREATE POLICY "Order creators can update their orders" ON group_orders
+  FOR UPDATE USING (auth.uid() = created_by);
 
--- Create policies for group_order_items table
-CREATE POLICY "Allow public read access to group order items" ON group_order_items
+-- Group order items policies
+CREATE POLICY "Anyone can view group order items" ON group_order_items
   FOR SELECT USING (true);
 
-CREATE POLICY "Allow public insert access to group order items" ON group_order_items
+CREATE POLICY "Anyone can insert group order items" ON group_order_items
   FOR INSERT WITH CHECK (true);
 
-CREATE POLICY "Allow public update access to group order items" ON group_order_items
+CREATE POLICY "Anyone can update group order items" ON group_order_items
   FOR UPDATE USING (true);
 
-CREATE POLICY "Allow public delete access to group order items" ON group_order_items
-  FOR DELETE USING (true);
-
--- Enable real-time for both tables
+-- Enable realtime for tables
+ALTER PUBLICATION supabase_realtime ADD TABLE company_profiles;
 ALTER PUBLICATION supabase_realtime ADD TABLE group_orders;
 ALTER PUBLICATION supabase_realtime ADD TABLE group_order_items;
 
@@ -74,11 +95,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create triggers to automatically update updated_at
-CREATE TRIGGER update_group_orders_updated_at 
-  BEFORE UPDATE ON group_orders 
+-- Create triggers for updated_at
+CREATE TRIGGER update_company_profiles_updated_at 
+  BEFORE UPDATE ON company_profiles 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_group_order_items_updated_at 
-  BEFORE UPDATE ON group_order_items 
+CREATE TRIGGER update_group_orders_updated_at 
+  BEFORE UPDATE ON group_orders 
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column(); 
