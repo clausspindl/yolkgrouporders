@@ -925,6 +925,7 @@ export default function YolkBusinessPortal() {
   }>>([])
   const [isGroupOrderMode, setIsGroupOrderMode] = useState(false)
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false)
+  const [groupOrderNotFound, setGroupOrderNotFound] = useState(false)
 
   // Combine date and time into selectedTime when both are available
   useEffect(() => {
@@ -966,10 +967,38 @@ export default function YolkBusinessPortal() {
     const groupOrderId = urlParams.get('group-order')
     
     if (groupOrderId) {
+      console.log('Group order ID detected in URL:', groupOrderId)
       // Set up real-time subscription for group order updates
       const setupRealtimeSubscription = async () => {
+        console.log('Setting up real-time subscription for group order:', groupOrderId)
+        
         try {
-          // Fetch initial group order data from Supabase
+          // First, try localStorage fallback (for demo/testing)
+          const existingGroupOrder = localStorage.getItem(`groupOrder_${groupOrderId}`)
+          if (existingGroupOrder) {
+            console.log('Found group order in localStorage:', existingGroupOrder)
+            const parsedData = JSON.parse(existingGroupOrder)
+            
+            // Set all the group order data
+            setGroupOrderId(groupOrderId)
+            setGroupOrderUrl(window.location.href)
+            setIndividualBudget(parsedData.budget?.toString() || "25")
+            setTeamSize(parsedData.teamSize?.toString() || "10")
+            setOrderDeadline(parsedData.deadline || "2 days before pickup")
+            setGroupOrders(parsedData.orders || [])
+            setSelectedVenue(parsedData.venue || "")
+            setSelectedTime(parsedData.time || "")
+            setDeliveryType(parsedData.deliveryType || "collection")
+            setDeliveryAddress(parsedData.deliveryAddress || "")
+            setIsGroupOrderMode(true)
+            setCurrentView("menu")
+            
+            console.log('Group order loaded from localStorage, navigating to menu')
+            return
+          }
+
+          // If no localStorage data, try Supabase
+          console.log('No localStorage data, trying Supabase...')
           const { data: groupOrderData, error: groupOrderError } = await supabase
             .from('group_orders')
             .select('*')
@@ -977,27 +1006,15 @@ export default function YolkBusinessPortal() {
             .single()
 
           if (groupOrderError) {
-            console.error('Error fetching group order:', groupOrderError)
-            // Fallback to localStorage for demo
-            const existingGroupOrder = localStorage.getItem(`groupOrder_${groupOrderId}`)
-            if (existingGroupOrder) {
-              const parsedData = JSON.parse(existingGroupOrder)
-              setGroupOrderId(groupOrderId)
-              setGroupOrderUrl(window.location.href)
-              setIndividualBudget(parsedData.budget || "25")
-              setTeamSize(parsedData.teamSize || "10")
-              setOrderDeadline(parsedData.deadline || "2 days before pickup")
-              setGroupOrders(parsedData.orders || [])
-              setSelectedVenue(parsedData.venue || "")
-              setSelectedTime(parsedData.time || "")
-              setDeliveryType(parsedData.deliveryType || "collection")
-              setIsGroupOrderMode(true)
-              setCurrentView("menu")
-            }
+            console.error('Error fetching group order from Supabase:', groupOrderError)
+            console.log('No group order found in Supabase or localStorage')
+            console.log('Please create a group order first, or check if the group order ID is correct')
+            setGroupOrderNotFound(true)
             return
           }
 
           // Set group order data
+          console.log('Group order data from Supabase:', groupOrderData)
           setGroupOrderId(groupOrderId)
           setGroupOrderUrl(window.location.href)
           setIndividualBudget(groupOrderData.budget?.toString() || "25")
@@ -1009,6 +1026,8 @@ export default function YolkBusinessPortal() {
           setDeliveryAddress(groupOrderData.delivery_address || "")
           setIsGroupOrderMode(true)
           setCurrentView("menu")
+          
+          console.log('Group order loaded from Supabase, navigating to menu')
 
           // Fetch group order items
           const { data: itemsData, error: itemsError } = await supabase
@@ -1683,6 +1702,34 @@ export default function YolkBusinessPortal() {
 
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
+      {/* Group Order Not Found Alert */}
+      <AnimatePresence>
+        {groupOrderNotFound && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[100] bg-red-600 text-white px-6 py-4 rounded-lg shadow-lg"
+          >
+            <div className="flex items-center space-x-3">
+              <X className="h-5 w-5" />
+              <div>
+                <h3 className="font-bold">Group Order Not Found</h3>
+                <p className="text-sm">The group order link you're trying to access doesn't exist or has expired.</p>
+              </div>
+              <Button
+                onClick={() => setGroupOrderNotFound(false)}
+                variant="ghost"
+                size="sm"
+                className="text-white hover:bg-red-700"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* YOLK YES! Animation - centered on screen */}
       <AnimatePresence>
         {showYolkYes && (
