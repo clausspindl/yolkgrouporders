@@ -110,112 +110,180 @@ const GoogleMapComponent = ({
   ]
 
   useEffect(() => {
-    // Load Google Maps API
+    // Load Google Maps API only once
     const loadGoogleMaps = () => {
       if (window.google && window.google.maps) {
         initializeMap()
         return
       }
 
+      // Check if script is already being loaded
+      if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+        // Wait for existing script to load
+        const checkGoogleMaps = setInterval(() => {
+          if (window.google && window.google.maps) {
+            clearInterval(checkGoogleMaps)
+            initializeMap()
+          }
+        }, 100)
+        return
+      }
+
       const script = document.createElement('script')
-      script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&libraries=places`
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'DEMO_KEY'}&libraries=places`
       script.async = true
       script.defer = true
       script.onload = initializeMap
+      script.onerror = () => {
+        console.error('Failed to load Google Maps API')
+        // Show fallback content
+        if (mapRef.current) {
+          mapRef.current.innerHTML = `
+            <div class="flex items-center justify-center h-full bg-zinc-800 rounded-2xl">
+              <div class="text-center p-8">
+                <div class="text-[#f8f68f] text-4xl mb-4">🗺️</div>
+                <h3 class="text-white font-bold mb-2 uppercase" style="font-family: 'alternate-gothic-atf', sans-serif;">Map Unavailable</h3>
+                <p class="text-gray-400 text-sm mb-4">Please select a venue from the list below</p>
+                <div class="grid grid-cols-1 gap-3">
+                  ${venues.map(venue => `
+                    <div class="bg-black/30 border border-zinc-700 rounded-lg p-3 cursor-pointer hover:border-[#f8f68f] transition-colors" 
+                         onclick="window.selectVenue('${venue.id}')">
+                      <h4 class="text-white font-bold text-sm uppercase">${venue.name}</h4>
+                      <p class="text-gray-400 text-xs">${venue.address}</p>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          `
+          // Add global function for venue selection
+          ;(window as any).selectVenue = onVenueSelect
+        }
+      }
       document.head.appendChild(script)
     }
 
     const initializeMap = () => {
-      if (!mapRef.current || !window.google) return
+      if (!mapRef.current || !window.google) {
+        console.error('Map container or Google Maps not available')
+        return
+      }
 
-      // Create map instance
-      const map = new window.google.maps.Map(mapRef.current, {
-        center: { lat: 51.5074, lng: -0.1278 }, // London center
-        zoom: 12,
-        styles: mapStyles,
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: false,
-        zoomControl: true,
-        zoomControlOptions: {
-          position: window.google.maps.ControlPosition.RIGHT_BOTTOM
-        }
-      })
-
-      mapInstanceRef.current = map
-
-      // Create custom YOLK YES markers
-      venues.forEach((venue) => {
-        const marker = new window.google.maps.Marker({
-          position: { lat: venue.lat, lng: venue.lng },
-          map: map,
-          title: venue.name,
-          icon: {
-            url: '/yolk-yes.png',
-            scaledSize: new window.google.maps.Size(40, 40),
-            anchor: new window.google.maps.Point(20, 20)
-          },
-          animation: selectedVenue === venue.id ? window.google.maps.Animation.BOUNCE : null
-        })
-
-        // Add click listener
-        marker.addListener('click', () => {
-          onVenueSelect(venue.id)
-        })
-
-        // Add info window
-        const infoWindow = new window.google.maps.InfoWindow({
-          content: `
-            <div style="padding: 10px; max-width: 200px;">
-              <h3 style="margin: 0 0 5px 0; color: #f8f68f; font-weight: bold;">${venue.name}</h3>
-              <p style="margin: 0; color: #333; font-size: 12px;">${venue.address}</p>
-            </div>
-          `
-        })
-
-        marker.addListener('click', () => {
-          infoWindow.open(map, marker)
-        })
-
-        markersRef.current.push(marker)
-      })
-
-      // Initialize Places Autocomplete
-      if (searchBoxRef.current) {
-        autocompleteRef.current = new window.google.maps.places.Autocomplete(searchBoxRef.current, {
-          types: ['address'],
-          componentRestrictions: { country: 'GB' }
-        })
-
-        autocompleteRef.current.addListener('place_changed', () => {
-          const place = autocompleteRef.current.getPlace()
-          if (place.geometry) {
-            const lat = place.geometry.location.lat()
-            const lng = place.geometry.location.lng()
-            
-            // Find closest venue
-            let closestVenue = venues[0]
-            let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
-            
-            venues.forEach(venue => {
-              const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
-              if (distance < minDistance) {
-                minDistance = distance
-                closestVenue = venue
-              }
-            })
-
-            // Select closest venue
-            onVenueSelect(closestVenue.id)
-            
-            // Update address
-            onAddressSelect(place.formatted_address)
-            
-            // Pan map to selected venue
-            map.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
-            map.setZoom(14)
+      try {
+        // Create map instance
+        const map = new window.google.maps.Map(mapRef.current, {
+          center: { lat: 51.5074, lng: -0.1278 }, // London center
+          zoom: 12,
+          styles: mapStyles,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          zoomControl: true,
+          zoomControlOptions: {
+            position: window.google.maps.ControlPosition.RIGHT_BOTTOM
           }
         })
+
+                mapInstanceRef.current = map
+
+        // Create custom YOLK YES markers
+        venues.forEach((venue: any) => {
+          const marker = new window.google.maps.Marker({
+            position: { lat: venue.lat, lng: venue.lng },
+            map: map,
+            title: venue.name,
+            icon: {
+              url: '/yolk-yes.png',
+              scaledSize: new window.google.maps.Size(40, 40),
+              anchor: new window.google.maps.Point(20, 20)
+            },
+            animation: selectedVenue === venue.id ? window.google.maps.Animation.BOUNCE : null
+          })
+
+          // Add click listener
+          marker.addListener('click', () => {
+            onVenueSelect(venue.id)
+          })
+
+          // Add info window
+          const infoWindow = new window.google.maps.InfoWindow({
+            content: `
+              <div style="padding: 10px; max-width: 200px;">
+                <h3 style="margin: 0 0 5px 0; color: #f8f68f; font-weight: bold;">${venue.name}</h3>
+                <p style="margin: 0; color: #333; font-size: 12px;">${venue.address}</p>
+              </div>
+            `
+          })
+
+          marker.addListener('click', () => {
+            infoWindow.open(map, marker)
+          })
+
+          markersRef.current.push(marker)
+        })
+
+        // Initialize Places Autocomplete
+        if (searchBoxRef.current) {
+          autocompleteRef.current = new window.google.maps.places.Autocomplete(searchBoxRef.current, {
+            types: ['address'],
+            componentRestrictions: { country: 'GB' }
+          })
+
+          autocompleteRef.current.addListener('place_changed', () => {
+            const place = autocompleteRef.current.getPlace()
+            if (place.geometry) {
+              const lat = place.geometry.location.lat()
+              const lng = place.geometry.location.lng()
+              
+              // Find closest venue
+              let closestVenue = venues[0]
+              let minDistance = calculateDistance(lat, lng, venues[0].lat, venues[0].lng)
+              
+              venues.forEach((venue: any) => {
+                const distance = calculateDistance(lat, lng, venue.lat, venue.lng)
+                if (distance < minDistance) {
+                  minDistance = distance
+                  closestVenue = venue
+                }
+              })
+
+              // Select closest venue
+              onVenueSelect(closestVenue.id)
+              
+              // Update address
+              onAddressSelect(place.formatted_address)
+              
+              // Pan map to selected venue
+              map.panTo({ lat: closestVenue.lat, lng: closestVenue.lng })
+              map.setZoom(14)
+            }
+          })
+        }
+      } catch (error) {
+        console.error('Error initializing Google Maps:', error)
+        // Show fallback content
+        if (mapRef.current) {
+          mapRef.current.innerHTML = `
+            <div class="flex items-center justify-center h-full bg-zinc-800 rounded-2xl">
+              <div class="text-center p-8">
+                <div class="text-[#f8f68f] text-4xl mb-4">🗺️</div>
+                <h3 class="text-white font-bold mb-2 uppercase" style="font-family: 'alternate-gothic-atf', sans-serif;">Map Unavailable</h3>
+                <p class="text-gray-400 text-sm mb-4">Please select a venue from the list below</p>
+                <div class="grid grid-cols-1 gap-3">
+                  ${venues.map((venue: any) => `
+                    <div class="bg-black/30 border border-zinc-700 rounded-lg p-3 cursor-pointer hover:border-[#f8f68f] transition-colors" 
+                         onclick="window.selectVenue('${venue.id}')">
+                      <h4 class="text-white font-bold text-sm uppercase">${venue.name}</h4>
+                      <p class="text-gray-400 text-xs">${venue.address}</p>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          `
+          // Add global function for venue selection
+          ;(window as any).selectVenue = onVenueSelect
+        }
       }
     }
 
