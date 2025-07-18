@@ -237,6 +237,12 @@ export default function CartPage() {
   }
 
   const completeOrder = async () => {
+    // Only managers can complete group orders
+    if (isGroupOrderMode && groupOrderId && currentGroupOrder?.created_by !== user?.id) {
+      console.log('Team members cannot complete group orders')
+      return
+    }
+
     // If this is a group order, update the payment method and status
     if (isGroupOrderMode && groupOrderId) {
       try {
@@ -561,7 +567,7 @@ export default function CartPage() {
                               onClick={() => updateQuantity(item.id, -1)}
                               size="sm"
                               variant="outline"
-                              className="border-zinc-300 text-black hover:bg-zinc-200"
+                              className="border-zinc-300 text-white hover:bg-zinc-200"
                             >
                               <Minus className="h-4 w-4" />
                             </Button>
@@ -570,7 +576,7 @@ export default function CartPage() {
                               onClick={() => updateQuantity(item.id, 1)}
                               size="sm"
                               variant="outline"
-                              className="border-zinc-300 text-black hover:bg-zinc-200"
+                              className="border-zinc-300 text-white hover:bg-zinc-200"
                             >
                               <Plus className="h-4 w-4" />
                             </Button>
@@ -678,75 +684,129 @@ export default function CartPage() {
               </CardContent>
             </Card>
 
-            {/* Payment Method Selection */}
-            <Card className="bg-zinc-100/50 border-zinc-200">
-              <CardHeader>
-                <CardTitle className="text-black uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Payment Method</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <Card 
-                    className={`cursor-pointer transition-all duration-200 ${
-                      paymentMethod === "card"
-                        ? 'bg-zinc-300 border-zinc-400' 
-                        : 'bg-white/30 border-zinc-200 hover:border-zinc-400'
-                    }`}
-                    onClick={() => setPaymentMethod("card")}
-                  >
-                    <CardContent className="p-4 text-center">
-                      <CreditCard className="h-8 w-8 mx-auto mb-2 text-black" />
-                      <h3 className="text-black font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Card Payment
-                      </h3>
-                      <p className="text-zinc-700 text-xs">Pay now with card</p>
-                    </CardContent>
-                  </Card>
+            {/* Payment Method Selection - Only for managers */}
+            {isGroupOrderMode && currentGroupOrder?.created_by === user?.id && (
+              <Card className="bg-zinc-100/50 border-zinc-200">
+                <CardHeader>
+                  <CardTitle className="text-black uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Payment Method</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    <Card 
+                      className={`cursor-pointer transition-all duration-200 ${
+                        paymentMethod === "card"
+                          ? 'bg-zinc-300 border-zinc-400' 
+                          : 'bg-white/30 border-zinc-200 hover:border-zinc-400'
+                      }`}
+                      onClick={() => setPaymentMethod("card")}
+                    >
+                      <CardContent className="p-4 text-center">
+                        <CreditCard className="h-8 w-8 mx-auto mb-2 text-black" />
+                        <h3 className="text-black font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Card Payment
+                        </h3>
+                        <p className="text-zinc-700 text-xs">Pay now with card</p>
+                      </CardContent>
+                    </Card>
 
-                  <Card 
-                    className={`cursor-pointer transition-all duration-200 ${
-                      paymentMethod === "invoice"
-                        ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
-                        : 'bg-white/30 border-zinc-200 hover:border-zinc-400'
-                    }`}
-                    onClick={() => {
-                      if (!isInvoiceApproved) {
-                        setShowInvoiceApplication(true)
-                      } else {
-                        setPaymentMethod("invoice")
-                      }
-                    }}
-                  >
-                    <CardContent className="p-4 text-center">
-                      <FileText className="h-8 w-8 mx-auto mb-2 text-black" />
-                      <h3 className="text-black font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                        Invoice
-                      </h3>
-                      <p className="text-zinc-600 text-xs">
-                        {isInvoiceApproved ? "Approved - Pay later" : "Apply for invoice terms"}
-                      </p>
-                      {isInvoiceApproved && (
-                        <Badge className="mt-2 bg-green-500 text-white text-xs">APPROVED</Badge>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                {paymentMethod === "invoice" && isInvoiceApproved && (
+                    <Card 
+                      className={`cursor-pointer transition-all duration-200 ${
+                        paymentMethod === "invoice"
+                          ? 'bg-[#f8f68f]/20 border-[#f8f68f] ring-2 ring-[#f8f68f]/50' 
+                          : 'bg-white/30 border-zinc-200 hover:border-zinc-400'
+                      }`}
+                      onClick={() => {
+                        if (!isInvoiceApproved) {
+                          setShowInvoiceApplication(true)
+                        } else {
+                          setPaymentMethod("invoice")
+                        }
+                      }}
+                    >
+                      <CardContent className="p-4 text-center">
+                        <FileText className="h-8 w-8 mx-auto mb-2 text-black" />
+                        <h3 className="text-black font-medium text-lg uppercase mb-1" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                          Invoice
+                        </h3>
+                        <p className="text-zinc-600 text-xs">
+                          {isInvoiceApproved ? "Approved - Pay later" : "Apply for invoice terms"}
+                        </p>
+                        {isInvoiceApproved && (
+                          <Badge className="mt-2 bg-green-500 text-white text-xs">APPROVED</Badge>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  {paymentMethod === "invoice" && isInvoiceApproved && (
+                    <div className="bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded p-3">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-black" />
+                        <p className="text-black text-sm">
+                          Invoice terms approved. Payment due within 30 days.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Team Member Info - Only for team members */}
+            {isGroupOrderMode && currentGroupOrder?.created_by !== user?.id && (
+              <Card className="bg-zinc-100/50 border-zinc-200">
+                <CardHeader>
+                  <CardTitle className="text-black uppercase" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Your Order</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="bg-[#f8f68f]/10 border-[#f8f68f]/30 rounded p-3">
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle className="h-4 w-4 text-black" />
-                      <p className="text-black text-sm">
-                        Invoice terms approved. Payment due within 30 days.
-                      </p>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Users className="h-4 w-4 text-[#f8f68f]" />
+                      <span className="text-black font-medium">Team Order</span>
+                    </div>
+                    <p className="text-zinc-600 text-sm">
+                      You're part of a group order. Your manager will handle payment and finalization.
+                    </p>
+                  </div>
+                  
+                  <div className="bg-white/30 border border-zinc-200 rounded p-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-zinc-600">Your budget:</span>
+                      <span className="text-black font-bold text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                        £{individualBudget}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-zinc-600">Spent:</span>
+                      <span className="text-black font-medium">
+                        £{groupOrders.find(order => order.personName === "You")?.totalSpent || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-zinc-600">Remaining:</span>
+                      <span className={`font-medium ${
+                        (() => {
+                          const remaining = Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))
+                          const percentage = (remaining / Number(individualBudget)) * 100
+                          if (percentage <= 10) return 'text-red-600'
+                          if (percentage <= 25) return 'text-orange-600'
+                          return 'text-green-600'
+                        })()
+                      }`}>
+                        £{Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))}
+                      </span>
                     </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
+            {/* Total and Complete Order - Different for team members vs managers */}
             <Card className="bg-zinc-100/50 border-zinc-200">
               <CardHeader>
-                <CardTitle className="text-black uppercase text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>Total</CardTitle>
+                <CardTitle className="text-black uppercase text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                  {isGroupOrderMode && currentGroupOrder?.created_by !== user?.id ? "Your Total" : "Total"}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
@@ -755,23 +815,70 @@ export default function CartPage() {
                     <span>£{getTotalPrice()}</span>
                   </div>
                 </div>
-                <Button
-                  onClick={completeOrder}
-                  className="w-full mt-6 bg-[#f8f68f] text-black hover:bg-[#e6e346] font-medium uppercase shadow-lg text-xl"
-                  style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
-                  disabled={!selectedVenue || !selectedTime || getTotalItems() === 0 || (paymentMethod === "invoice" && !isInvoiceApproved)}
-                >
-                  {!selectedVenue || !selectedTime || getTotalItems() === 0 
-                    ? "COMPLETE YOUR ORDER" 
-                    : paymentMethod === "invoice" && !isInvoiceApproved
-                    ? "APPLY FOR INVOICE TERMS"
-                    : "YOLK YES! LET'S GO"}
-                </Button>
-                <p className="text-xs text-zinc-600 mt-2 text-center">
-                  {paymentMethod === "card" 
-                    ? "Secure payment processing" 
-                    : "Pay later, party now - we trust you!"}
-                </p>
+                
+                {isGroupOrderMode && currentGroupOrder?.created_by === user?.id ? (
+                  // Manager view - can complete order
+                  <>
+                    <Button
+                      onClick={completeOrder}
+                      className="w-full mt-6 bg-[#f8f68f] text-black hover:bg-[#e6e346] font-medium uppercase shadow-lg text-xl"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
+                      disabled={!selectedVenue || !selectedTime || getTotalItems() === 0 || (paymentMethod === "invoice" && !isInvoiceApproved)}
+                    >
+                      {!selectedVenue || !selectedTime || getTotalItems() === 0 
+                        ? "COMPLETE YOUR ORDER" 
+                        : paymentMethod === "invoice" && !isInvoiceApproved
+                        ? "APPLY FOR INVOICE TERMS"
+                        : "YOLK YES! LET'S GO"}
+                    </Button>
+                    <p className="text-xs text-zinc-600 mt-2 text-center">
+                      {paymentMethod === "card" 
+                        ? "Secure payment processing" 
+                        : "Pay later, party now - we trust you!"}
+                    </p>
+                  </>
+                ) : isGroupOrderMode && currentGroupOrder?.created_by !== user?.id ? (
+                  // Team member view - just confirmation
+                  <>
+                    <div className="bg-green-50 border border-green-200 rounded p-3 mt-4">
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <span className="text-green-800 text-sm font-medium">Order Added Successfully!</span>
+                      </div>
+                      <p className="text-green-700 text-xs mt-1">
+                        Your items have been added to the group order. Your manager will handle payment and finalization.
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => window.location.href = `/?group-order=${groupOrderId}`}
+                      className="w-full mt-4 bg-[#f8f68f] text-black hover:bg-[#e6e346] font-medium uppercase shadow-lg text-xl"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
+                    >
+                      Back to Menu
+                    </Button>
+                  </>
+                ) : (
+                  // Regular cart view (not group order)
+                  <>
+                    <Button
+                      onClick={completeOrder}
+                      className="w-full mt-6 bg-[#f8f68f] text-black hover:bg-[#e6e346] font-medium uppercase shadow-lg text-xl"
+                      style={{ fontFamily: '"alternate-gothic-atf", sans-serif', letterSpacing: '0.02em' }}
+                      disabled={!selectedVenue || !selectedTime || getTotalItems() === 0 || (paymentMethod === "invoice" && !isInvoiceApproved)}
+                    >
+                      {!selectedVenue || !selectedTime || getTotalItems() === 0 
+                        ? "COMPLETE YOUR ORDER" 
+                        : paymentMethod === "invoice" && !isInvoiceApproved
+                        ? "APPLY FOR INVOICE TERMS"
+                        : "YOLK YES! LET'S GO"}
+                    </Button>
+                    <p className="text-xs text-zinc-600 mt-2 text-center">
+                      {paymentMethod === "card" 
+                        ? "Secure payment processing" 
+                        : "Pay later, party now - we trust you!"}
+                    </p>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

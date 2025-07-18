@@ -2685,52 +2685,31 @@ export default function YolkBusinessPortal() {
                   className="flex items-center space-x-4 bg-black/10 px-4 py-2 rounded-lg hover:bg-black/20 transition-colors cursor-pointer"
                   title="Click to change order details"
                 >
-                  <div className="flex items-center space-x-2">
-                    {deliveryType === "delivery" ? (
-                      <Truck className="h-4 w-4 text-black" />
-                    ) : (
-                      <Building2 className="h-4 w-4 text-black" />
-                    )}
-                    <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                      {venues.find(v => v.id === selectedVenue)?.name}
-                    </span>
-                  </div>
-                  <div className="w-px h-4 bg-black/30"></div>
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="h-4 w-4 text-black" />
-                    <span className="text-black font-medium text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                      {new Date(selectedTime).toLocaleDateString('en-GB', { 
-                        weekday: 'short', 
-                        day: 'numeric', 
-                        month: 'short'
-                      })} {new Date(selectedTime).toLocaleTimeString('en-GB', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      })}
-                    </span>
-                  </div>
                   {/* Budget display for team members */}
                   {isTeamMemberMode && individualBudget && (
                     <>
-                      <div className="w-px h-4 bg-black/30"></div>
-                      <div className="flex items-center space-x-2">
-                        <CreditCard className="h-4 w-4 text-black" />
-                        <div className="text-right">
-                          <div className="text-black font-medium text-sm" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
-                            £{groupOrders.find(order => order.personName === "You")?.totalSpent || 0} / £{individualBudget}
-                          </div>
-                          <div className={`text-xs ${
+                      <div className="w-px h-4 bg-black/20"></div>
+                      <div className="flex items-center space-x-3">
+                        <CreditCard className="h-6 w-6 text-black" />
+                        <div className="flex items-center space-x-2">
+                          <span className="text-black font-bold text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            £{groupOrders.find(order => order.personName === "You")?.totalSpent || 0}
+                          </span>
+                          <span className="text-black opacity-60 text-xl">/</span>
+                          <span className="text-black font-bold text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            £{individualBudget}
+                          </span>
+                          <span className={`text-lg font-bold ${
                             (() => {
                               const remaining = Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))
                               const percentage = (remaining / Number(individualBudget)) * 100
-                              if (percentage <= 10) return 'text-red-600 font-medium'
-                              if (percentage <= 25) return 'text-orange-600 font-medium'
+                              if (percentage <= 10) return 'text-red-600'
+                              if (percentage <= 25) return 'text-orange-600'
                               return 'text-black opacity-70'
                             })()
-                          }`}>
-                            {Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))} remaining
-                          </div>
+                          }`} style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            (£{Math.max(0, Number(individualBudget) - (groupOrders.find(order => order.personName === "You")?.totalSpent || 0))} left)
+                          </span>
                         </div>
                       </div>
                     </>
@@ -2848,7 +2827,7 @@ export default function YolkBusinessPortal() {
                         </Badge>
                         <h1 className="text-5xl lg:text-6xl font-bold leading-tight uppercase" style={{ fontFamily: 'alternate-gothic-atf, serif' }}>
                           Your Team's
-                          <span className="block text-[#f8f68f]">Order Awaits</span>
+                          <span className="block text-[#f8f68f]">Order Awaits.</span>
                         </h1>
                         <p className="text-xl text-zinc-100 leading-relaxed max-w-lg">
                           You've been invited to join a group order! Choose your items within your budget and we'll handle the rest.
@@ -2859,14 +2838,14 @@ export default function YolkBusinessPortal() {
                       <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl p-6">
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
-                            <span className="text-zinc-100">Restaurant:</span>
-                            <span className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            <span className="text-zinc-100 text-lg">Restaurant:</span>
+                            <span className="text-white font-medium text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                               YOLK {venues.find(v => v.id === selectedVenue)?.name}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-zinc-100">Date & time:</span>
-                            <span className="text-white font-medium text-lg" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            <span className="text-zinc-10 text-lg">Date & time:</span>
+                            <span className="text-white font-medium text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                               {new Date(selectedTime).toLocaleDateString('en-GB', { 
                                 weekday: 'short', 
                                 day: 'numeric', 
@@ -2879,8 +2858,8 @@ export default function YolkBusinessPortal() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-zinc-100">Your budget:</span>
-                            <span className="text-[#f8f68f] font-bold text-xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
+                            <span className="text-zinc-100 text-lg">Your budget:</span>
+                            <span className="text-[#f8f68f] font-bold text-2xl" style={{ fontFamily: '"alternate-gothic-atf", sans-serif' }}>
                               £{individualBudget}
                             </span>
                           </div>
